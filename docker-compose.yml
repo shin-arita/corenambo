@@ -56,9 +56,7 @@ services:
     command: sh -c "go mod download && air -c .air.toml"
 
   db:
-    build:
-      context: ./db
-      dockerfile: Dockerfile
+    image: groonga/pgroonga:4.0.2-debian-16
     container_name: corenambo-db
     ports:
       - "${DB_PUBLISH_PORT:-5432}:5432"
@@ -69,7 +67,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
     volumes:
       - db_data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d
+      - ./db/initdb:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app_user} -d ${POSTGRES_DB:-app_db}"]
       interval: 10s
