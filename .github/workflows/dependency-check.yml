@@ -27,10 +27,10 @@ jobs:
       - run: test -f package-lock.json
 
       - run: |
-          ! grep -R -n "latest" .
+          ! grep -R -n "latest" . --exclude=dependency-check.yml
           ! grep -R -n "@latest" ../api
           ! grep -n "\^" package.json
-          ! grep -R -n "npm install" ..
+          ! grep -R -n "npm install" .. --exclude=dependency-check.yml
 
       - run: npm ci
 
