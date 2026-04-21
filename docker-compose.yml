@@ -26,6 +26,7 @@ services:
     working_dir: /app
     volumes:
       - ./api:/app
+      - ./db:/db
       - go_pkg_mod:/go/pkg/mod
     ports:
       - "${API_PORT:-8080}:8080"
