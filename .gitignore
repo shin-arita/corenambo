@@ -1,7 +1,22 @@
-node_modules
+# OS
+.DS_Store
+
+# env
 .env
+
+# Node
+node_modules
+frontend/node_modules
+
+# Build
 dist
 build
+
+# Logs
 *.log
-.DS_Store
+
+# Go
+api/tmp
+
+# Other
 vendor
