@@ -16,7 +16,7 @@ jobs:
         working-directory: frontend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v6
         with:
@@ -43,11 +43,12 @@ jobs:
         working-directory: api
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-go@v6
         with:
           go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
 
       - run: go mod download
       - run: go mod verify
@@ -57,5 +58,5 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: docker compose config
