@@ -1,5 +1,6 @@
 services:
   frontend:
+    image: corenambo-frontend:1.0.0
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -19,6 +20,7 @@ services:
     command: sh -c "npm ci && npm run dev"
 
   api:
+    image: corenambo-api:1.0.0
     build:
       context: ./api
       dockerfile: Dockerfile
@@ -34,6 +36,7 @@ services:
       TZ: ${TZ:-Asia/Tokyo}
       APP_ENV: ${APP_ENV:-local}
       PORT: 8080
+      DATABASE_URL: postgres://${POSTGRES_USER:-app_user}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-app_db}?sslmode=${DB_SSLMODE:-disable}
       DB_HOST: db
       DB_PORT: 5432
       DB_NAME: ${POSTGRES_DB:-app_db}
@@ -57,7 +60,10 @@ services:
     command: sh -c "go mod download && air -c .air.toml"
 
   db:
-    image: groonga/pgroonga:4.0.2-debian-16
+    image: corenambo-db:1.0.0
+    build:
+      context: ./db
+      dockerfile: Dockerfile
     container_name: corenambo-db
     ports:
       - "${DB_PUBLISH_PORT:-5432}:5432"

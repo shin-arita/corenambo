@@ -22,17 +22,16 @@ RUN apt-get update && \
       postgresql-common && \
     /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
 
-RUN wget https://packages.groonga.org/ubuntu/groonga-apt-source-latest-$(lsb_release --codename --short).deb && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends ./groonga-apt-source-latest-$(lsb_release --codename --short).deb && \
-    rm -f groonga-apt-source-latest-$(lsb_release --codename --short).deb
+COPY ./groonga.gpg /usr/share/keyrings/groonga.gpg
+
+RUN echo "deb [signed-by=/usr/share/keyrings/groonga.gpg] https://packages.groonga.org/ubuntu/ noble universe" > /etc/apt/sources.list.d/groonga.list
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      postgresql-16 \
-      postgresql-client-16 \
-      postgresql-16-pgroonga \
-      groonga-tokenizer-mecab && \
+      postgresql-16=16.13-1.pgdg24.04+1 \
+      postgresql-client-16=16.13-1.pgdg24.04+1 \
+      postgresql-16-pgdg-pgroonga=4.0.6-1 \
+      groonga-tokenizer-mecab=16.0.1-1 && \
     rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /var/lib/postgresql/data && \
@@ -46,4 +45,4 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 EXPOSE 5432
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["/usr/lib/postgresql/16/bin/postgres", "-D", "/var/lib/postgresql/data"]
+CMD ["/usr/lib/postgresql/16/bin/postgres", "-D", "/var/lib/postgresql/data", "-c", "listen_addresses=*"]

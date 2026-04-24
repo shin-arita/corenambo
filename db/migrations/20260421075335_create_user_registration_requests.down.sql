@@ -1,0 +1,6 @@
+DROP INDEX IF EXISTS idx_user_registration_requests_verified_at;
+DROP INDEX IF EXISTS idx_user_registration_requests_expires_at;
+DROP INDEX IF EXISTS idx_user_registration_requests_email;
+DROP INDEX IF EXISTS uq_user_registration_requests_token_hash;
+
+DROP TABLE IF EXISTS user_registration_requests;

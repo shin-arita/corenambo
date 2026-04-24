@@ -10,6 +10,8 @@ fi
 if [ ! -s "$PGDATA/PG_VERSION" ]; then
   /usr/lib/postgresql/16/bin/initdb -D "$PGDATA"
 
+  echo "host all all all scram-sha-256" >> "$PGDATA/pg_hba.conf"
+
   /usr/lib/postgresql/16/bin/pg_ctl -D "$PGDATA" -o "-c listen_addresses='localhost'" -w start
 
   for f in /docker-entrypoint-initdb.d/*; do
