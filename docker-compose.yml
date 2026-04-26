@@ -79,7 +79,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
     volumes:
       - db_data:/var/lib/postgresql/data
-      - ./db/initdb:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app_user} -d ${POSTGRES_DB:-app_db}"]
       interval: 10s
@@ -102,6 +101,28 @@ services:
       - "${REDIS_PORT:-6379}:6379"
     environment:
       TZ: ${TZ:-Asia/Tokyo}
+
+  worker:
+    image: corenambo-worker:1.0.0
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: corenambo-worker
+    working_dir: /app
+    volumes:
+      - ./api:/app
+    command: ["./worker"]
+    depends_on:
+      db:
+        condition: service_healthy
+      mail:
+        condition: service_started
+      redis:
+        condition: service_started
+    restart: always
+    environment:
+      TZ: ${TZ:-Asia/Tokyo}
+      DATABASE_URL: postgres://${POSTGRES_USER:-app_user}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-app_db}?sslmode=disable
 
 volumes:
   db_data:

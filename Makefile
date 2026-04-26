@@ -21,3 +21,6 @@ api:
 
 front:
 	docker compose exec frontend sh
+
+migrate-up:
+	docker compose exec api sh -lc 'migrate -path /db/migrations -database "$$DATABASE_URL" up'

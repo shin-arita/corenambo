@@ -38,7 +38,6 @@ RUN mkdir -p /var/lib/postgresql/data && \
     chown -R postgres:postgres /var/lib/postgresql
 
 COPY ./entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY ./initdb /docker-entrypoint-initdb.d
 
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
