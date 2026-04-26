@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS mail_outboxes;
+DROP TABLE IF EXISTS items;
+DROP TABLE IF EXISTS users;
