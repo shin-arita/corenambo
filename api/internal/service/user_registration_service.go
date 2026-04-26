@@ -22,6 +22,7 @@ var emailRegex = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 
 type UserRegistrationService interface {
 	Create(ctx context.Context, input CreateUserRegistrationInput) (*CreateUserRegistrationOutput, error)
+	Verify(ctx context.Context, input VerifyUserRegistrationInput) (*VerifyUserRegistrationOutput, error)
 }
 
 type CreateUserRegistrationInput struct {
@@ -31,6 +32,14 @@ type CreateUserRegistrationInput struct {
 }
 
 type CreateUserRegistrationOutput struct {
+	Code string
+}
+
+type VerifyUserRegistrationInput struct {
+	Token string
+}
+
+type VerifyUserRegistrationOutput struct {
 	Code string
 }
 
@@ -89,7 +98,20 @@ func (s *userRegistrationService) Create(
 	}
 
 	if req != nil && req.VerifiedAt != nil {
-		return nil, app_error.NewConflict(i18n.CodeUserAlreadyRegistered)
+		_ = s.mailer.SendUserAlreadyRegisteredMail(ctx, input.Email, input.Language)
+
+		return &CreateUserRegistrationOutput{
+			Code: i18n.CodeUserRegistrationRequestCreated,
+		}, nil
+	}
+
+	if req != nil && req.LastSentAt != nil {
+		resendAvailableAt := req.LastSentAt.Add(time.Duration(s.config.RegistrationResendIntervalMinutes()) * time.Minute)
+		if now.Before(resendAvailableAt) {
+			return &CreateUserRegistrationOutput{
+				Code: i18n.CodeUserRegistrationRequestCreated,
+			}, nil
+		}
 	}
 
 	plainToken, err := s.tokenGenerator.Generate()
@@ -117,6 +139,7 @@ func (s *userRegistrationService) Create(
 				TokenHash:  tokenHash,
 				ExpiresAt:  expiresAt,
 				VerifiedAt: nil,
+				LastSentAt: &now,
 				CreatedAt:  now,
 			}
 
@@ -126,6 +149,7 @@ func (s *userRegistrationService) Create(
 		} else {
 			req.TokenHash = tokenHash
 			req.ExpiresAt = expiresAt
+			req.LastSentAt = &now
 
 			if err := s.userRegistrationRequestRepo.UpdateToken(txCtx, req); err != nil {
 				return err
@@ -135,9 +159,10 @@ func (s *userRegistrationService) Create(
 		registerURL := s.registrationURLBuilder.Build(plainToken)
 
 		if err := s.mailer.SendUserRegistrationMail(txCtx, mail.UserRegistrationMail{
-			To:   input.Email,
-			URL:  registerURL,
-			Lang: input.Language,
+			To:             input.Email,
+			URL:            registerURL,
+			Lang:           input.Language,
+			ExpiresMinutes: s.config.RegistrationTokenExpiresMinutes(),
 		}); err != nil {
 			return err
 		}
@@ -150,6 +175,44 @@ func (s *userRegistrationService) Create(
 
 	return &CreateUserRegistrationOutput{
 		Code: i18n.CodeUserRegistrationRequestCreated,
+	}, nil
+}
+
+func (s *userRegistrationService) Verify(
+	ctx context.Context,
+	input VerifyUserRegistrationInput,
+) (*VerifyUserRegistrationOutput, error) {
+	tokenValue := strings.TrimSpace(input.Token)
+	if tokenValue == "" {
+		return nil, app_error.NewBadRequest(i18n.CodeBadRequest)
+	}
+
+	tokenHash, err := s.tokenHasher.Hash(tokenValue)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := s.userRegistrationRequestRepo.FindByTokenHash(ctx, tokenHash)
+	if err != nil {
+		return nil, err
+	}
+
+	if req == nil {
+		return nil, app_error.NewBadRequest(i18n.CodeTokenInvalid)
+	}
+
+	now := s.clock.Now()
+
+	if req.ExpiresAt.Before(now) {
+		return nil, app_error.NewBadRequest(i18n.CodeTokenExpired)
+	}
+
+	if req.VerifiedAt != nil {
+		return nil, app_error.NewConflict(i18n.CodeUserRegistrationAlreadyVerified)
+	}
+
+	return &VerifyUserRegistrationOutput{
+		Code: i18n.CodeUserRegistrationTokenVerified,
 	}, nil
 }
 

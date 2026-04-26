@@ -26,6 +26,26 @@ func TestNewUserRegistrationRequestRepository(t *testing.T) {
 	}
 }
 
+func userRegistrationRequestRows(now time.Time) *sqlmock.Rows {
+	return sqlmock.NewRows([]string{
+		"id",
+		"email",
+		"token_hash",
+		"expires_at",
+		"verified_at",
+		"last_sent_at",
+		"created_at",
+	}).AddRow(
+		"id",
+		"test@example.com",
+		"token-hash",
+		now,
+		nil,
+		nil,
+		now,
+	)
+}
+
 func TestUserRegistrationRequestRepositoryFindByEmail(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -35,25 +55,9 @@ func TestUserRegistrationRequestRepositoryFindByEmail(t *testing.T) {
 
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
-	rows := sqlmock.NewRows([]string{
-		"id",
-		"email",
-		"token_hash",
-		"expires_at",
-		"verified_at",
-		"created_at",
-	}).AddRow(
-		"id",
-		"test@example.com",
-		"token-hash",
-		now,
-		nil,
-		now,
-	)
-
 	mock.ExpectQuery("SELECT").
 		WithArgs("test@example.com").
-		WillReturnRows(rows)
+		WillReturnRows(userRegistrationRequestRows(now))
 
 	repo := NewUserRegistrationRequestRepository(db)
 
@@ -68,6 +72,10 @@ func TestUserRegistrationRequestRepositoryFindByEmail(t *testing.T) {
 
 	if entity.Email != "test@example.com" {
 		t.Fatalf("unexpected email: %s", entity.Email)
+	}
+
+	if entity.LastSentAt != nil {
+		t.Fatal("last sent at should be nil")
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -137,7 +145,7 @@ func TestUserRegistrationRequestRepositoryCreate(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	mock.ExpectExec("INSERT INTO user_registration_requests").
-		WithArgs("id", "test@example.com", "token-hash", now, nil, now).
+		WithArgs("id", "test@example.com", "token-hash", now, nil, sqlmock.AnyArg(), now).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	repo := NewUserRegistrationRequestRepository(db)
@@ -148,6 +156,7 @@ func TestUserRegistrationRequestRepositoryCreate(t *testing.T) {
 		TokenHash:  "token-hash",
 		ExpiresAt:  now,
 		VerifiedAt: nil,
+		LastSentAt: &now,
 		CreatedAt:  now,
 	})
 	if err != nil {
@@ -170,7 +179,7 @@ func TestUserRegistrationRequestRepositoryCreateError(t *testing.T) {
 	expectedErr := errors.New("insert failed")
 
 	mock.ExpectExec("INSERT INTO user_registration_requests").
-		WithArgs("id", "test@example.com", "token-hash", now, nil, now).
+		WithArgs("id", "test@example.com", "token-hash", now, nil, sqlmock.AnyArg(), now).
 		WillReturnError(expectedErr)
 
 	repo := NewUserRegistrationRequestRepository(db)
@@ -181,6 +190,7 @@ func TestUserRegistrationRequestRepositoryCreateError(t *testing.T) {
 		TokenHash:  "token-hash",
 		ExpiresAt:  now,
 		VerifiedAt: nil,
+		LastSentAt: &now,
 		CreatedAt:  now,
 	})
 	if !errors.Is(err, expectedErr) {
@@ -202,15 +212,16 @@ func TestUserRegistrationRequestRepositoryUpdateToken(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	mock.ExpectExec("UPDATE user_registration_requests").
-		WithArgs("id", "token-hash", now).
+		WithArgs("id", "token-hash", now, sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	repo := NewUserRegistrationRequestRepository(db)
 
 	err = repo.UpdateToken(context.Background(), &model.UserRegistrationRequest{
-		ID:        "id",
-		TokenHash: "token-hash",
-		ExpiresAt: now,
+		ID:         "id",
+		TokenHash:  "token-hash",
+		ExpiresAt:  now,
+		LastSentAt: &now,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -232,15 +243,16 @@ func TestUserRegistrationRequestRepositoryUpdateTokenError(t *testing.T) {
 	expectedErr := errors.New("update failed")
 
 	mock.ExpectExec("UPDATE user_registration_requests").
-		WithArgs("id", "token-hash", now).
+		WithArgs("id", "token-hash", now, sqlmock.AnyArg()).
 		WillReturnError(expectedErr)
 
 	repo := NewUserRegistrationRequestRepository(db)
 
 	err = repo.UpdateToken(context.Background(), &model.UserRegistrationRequest{
-		ID:        "id",
-		TokenHash: "token-hash",
-		ExpiresAt: now,
+		ID:         "id",
+		TokenHash:  "token-hash",
+		ExpiresAt:  now,
+		LastSentAt: &now,
 	})
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("unexpected error: %v", err)
@@ -382,4 +394,89 @@ func TestUserRegistrationRequestRepositoryInterface(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	_ = NewUserRegistrationRequestRepository(db)
+}
+
+func TestUserRegistrationRequestRepositoryFindByTokenHash(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	mock.ExpectQuery("SELECT").
+		WithArgs("token-hash").
+		WillReturnRows(userRegistrationRequestRows(now))
+
+	repo := NewUserRegistrationRequestRepository(db)
+
+	entity, err := repo.FindByTokenHash(context.Background(), "token-hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if entity == nil {
+		t.Fatal("entity is nil")
+	}
+
+	if entity.TokenHash != "token-hash" {
+		t.Fatalf("unexpected token hash: %s", entity.TokenHash)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUserRegistrationRequestRepositoryFindByTokenHashNoRows(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectQuery("SELECT").
+		WithArgs("none").
+		WillReturnError(sql.ErrNoRows)
+
+	repo := NewUserRegistrationRequestRepository(db)
+
+	entity, err := repo.FindByTokenHash(context.Background(), "none")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if entity != nil {
+		t.Fatal("entity should be nil")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUserRegistrationRequestRepositoryFindByTokenHashError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	expectedErr := errors.New("select failed")
+
+	mock.ExpectQuery("SELECT").
+		WithArgs("token-hash").
+		WillReturnError(expectedErr)
+
+	repo := NewUserRegistrationRequestRepository(db)
+
+	_, err = repo.FindByTokenHash(context.Background(), "token-hash")
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
 }

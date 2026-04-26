@@ -13,6 +13,7 @@ type UserRegistrationRequest struct {
 	TokenHash  string
 	ExpiresAt  time.Time
 	VerifiedAt *time.Time
+	LastSentAt *time.Time
 	CreatedAt  time.Time
 }
 

@@ -14,10 +14,12 @@ import (
 )
 
 type mockUserRegistrationRequestRepository struct {
-	findResult *model.UserRegistrationRequest
-	findErr    error
-	createErr  error
-	updateErr  error
+	findResult            *model.UserRegistrationRequest
+	findErr               error
+	findByTokenHashResult *model.UserRegistrationRequest
+	findByTokenHashErr    error
+	createErr             error
+	updateErr             error
 
 	findCalled   bool
 	createCalled bool
@@ -33,6 +35,10 @@ func (m *mockUserRegistrationRequestRepository) FindByEmail(ctx context.Context,
 	m.findEmail = email
 
 	return m.findResult, m.findErr
+}
+
+func (m *mockUserRegistrationRequestRepository) FindByTokenHash(ctx context.Context, tokenHash string) (*model.UserRegistrationRequest, error) {
+	return m.findByTokenHashResult, m.findByTokenHashErr
 }
 
 func (m *mockUserRegistrationRequestRepository) Create(ctx context.Context, entity *model.UserRegistrationRequest) error {
@@ -121,6 +127,12 @@ type mockMailer struct {
 	err    error
 	called bool
 	data   mail.UserRegistrationMail
+}
+
+func (m *mockMailer) SendUserAlreadyRegisteredMail(ctx context.Context, to string, lang string) error {
+	m.called = true
+
+	return m.err
 }
 
 func (m *mockMailer) SendUserRegistrationMail(ctx context.Context, mailData mail.UserRegistrationMail) error {
@@ -393,6 +405,66 @@ func TestUserRegistrationServiceCreateExistingRequest(t *testing.T) {
 	}
 }
 
+func TestUserRegistrationServiceCreateExistingRequestWithinResendInterval(t *testing.T) {
+	lastSentAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	repo := &mockUserRegistrationRequestRepository{
+		findResult: &model.UserRegistrationRequest{
+			ID:         "existing-id",
+			Email:      "test@example.com",
+			TokenHash:  "old-token-hash",
+			LastSentAt: &lastSentAt,
+		},
+	}
+	txManager := &mockTxManager{}
+	tokenGenerator := &mockTokenGenerator{}
+	tokenHasher := &mockTokenHasher{}
+	mailer := &mockMailer{}
+
+	svc := newTestUserRegistrationService(
+		repo,
+		txManager,
+		tokenGenerator,
+		tokenHasher,
+		&mockUUIDGenerator{},
+		mailer,
+		&mockRegistrationURLBuilder{},
+	)
+
+	out, err := svc.Create(context.Background(), CreateUserRegistrationInput{
+		Email:             "test@example.com",
+		EmailConfirmation: "test@example.com",
+		Language:          "ja",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if out.Code != i18n.CodeUserRegistrationRequestCreated {
+		t.Fatalf("unexpected code: %s", out.Code)
+	}
+
+	if tokenGenerator.called {
+		t.Fatal("token generator should not be called")
+	}
+
+	if tokenHasher.called {
+		t.Fatal("token hasher should not be called")
+	}
+
+	if txManager.called {
+		t.Fatal("transaction should not be called")
+	}
+
+	if repo.updateCalled {
+		t.Fatal("UpdateToken should not be called")
+	}
+
+	if mailer.called {
+		t.Fatal("mail should not be sent")
+	}
+}
+
 func TestUserRegistrationServiceCreateAlreadyRegistered(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	repo := &mockUserRegistrationRequestRepository{
@@ -416,25 +488,17 @@ func TestUserRegistrationServiceCreateAlreadyRegistered(t *testing.T) {
 		&mockRegistrationURLBuilder{},
 	)
 
-	_, err := svc.Create(context.Background(), CreateUserRegistrationInput{
+	out, err := svc.Create(context.Background(), CreateUserRegistrationInput{
 		Email:             "test@example.com",
 		EmailConfirmation: "test@example.com",
+		Language:          "ja",
 	})
-	if err == nil {
-		t.Fatal("expected error")
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	appErr, ok := err.(*app_error.AppError)
-	if !ok {
-		t.Fatal("expected AppError")
-	}
-
-	if appErr.Code != i18n.CodeUserAlreadyRegistered {
-		t.Fatalf("unexpected code: %s", appErr.Code)
-	}
-
-	if appErr.Status != http.StatusConflict {
-		t.Fatalf("unexpected status: %d", appErr.Status)
+	if out.Code != i18n.CodeUserRegistrationRequestCreated {
+		t.Fatalf("unexpected code: %s", out.Code)
 	}
 
 	if tokenGenerator.called {
@@ -445,8 +509,8 @@ func TestUserRegistrationServiceCreateAlreadyRegistered(t *testing.T) {
 		t.Fatal("transaction should not be called")
 	}
 
-	if mailer.called {
-		t.Fatal("mail should not be sent")
+	if !mailer.called {
+		t.Fatal("mail should be sent")
 	}
 }
 
@@ -934,4 +998,218 @@ func TestUserRegistrationServiceCreateMultipleValidationErrors(t *testing.T) {
 	if repo.findCalled {
 		t.Fatal("FindByEmail should not be called")
 	}
+}
+
+func TestUserRegistrationServiceVerifySuccess(t *testing.T) {
+	repo := &mockUserRegistrationRequestRepository{
+		findByTokenHashResult: &model.UserRegistrationRequest{
+			ExpiresAt: time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC),
+		},
+	}
+
+	svc := newTestUserRegistrationService(
+		repo,
+		&mockTxManager{},
+		&mockTokenGenerator{},
+		&mockTokenHasher{},
+		&mockUUIDGenerator{},
+		&mockMailer{},
+		&mockRegistrationURLBuilder{},
+	)
+
+	out, err := svc.Verify(context.Background(), VerifyUserRegistrationInput{
+		Token: "plain-token",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if out.Code != i18n.CodeUserRegistrationTokenVerified {
+		t.Fatalf("unexpected code: %s", out.Code)
+	}
+}
+
+func TestUserRegistrationServiceVerifyTokenRequired(t *testing.T) {
+	svc := newTestUserRegistrationService(
+		&mockUserRegistrationRequestRepository{},
+		&mockTxManager{},
+		&mockTokenGenerator{},
+		&mockTokenHasher{},
+		&mockUUIDGenerator{},
+		&mockMailer{},
+		&mockRegistrationURLBuilder{},
+	)
+
+	_, err := svc.Verify(context.Background(), VerifyUserRegistrationInput{
+		Token: " ",
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	appErr, ok := err.(*app_error.AppError)
+	if !ok {
+		t.Fatal("expected AppError")
+	}
+
+	if appErr.Code != i18n.CodeBadRequest {
+		t.Fatalf("unexpected code: %s", appErr.Code)
+	}
+}
+
+func TestUserRegistrationServiceVerifyInvalidToken(t *testing.T) {
+	repo := &mockUserRegistrationRequestRepository{
+		findByTokenHashResult: nil,
+	}
+
+	svc := newTestUserRegistrationService(
+		repo,
+		&mockTxManager{},
+		&mockTokenGenerator{},
+		&mockTokenHasher{},
+		&mockUUIDGenerator{},
+		&mockMailer{},
+		&mockRegistrationURLBuilder{},
+	)
+
+	_, err := svc.Verify(context.Background(), VerifyUserRegistrationInput{
+		Token: "plain-token",
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	appErr, ok := err.(*app_error.AppError)
+	if !ok {
+		t.Fatal("expected AppError")
+	}
+
+	if appErr.Code != i18n.CodeTokenInvalid {
+		t.Fatalf("unexpected code: %s", appErr.Code)
+	}
+}
+
+func TestUserRegistrationServiceVerifyExpired(t *testing.T) {
+	repo := &mockUserRegistrationRequestRepository{
+		findByTokenHashResult: &model.UserRegistrationRequest{
+			ExpiresAt: time.Date(2025, 12, 31, 23, 59, 59, 0, time.UTC),
+		},
+	}
+
+	svc := newTestUserRegistrationService(
+		repo,
+		&mockTxManager{},
+		&mockTokenGenerator{},
+		&mockTokenHasher{},
+		&mockUUIDGenerator{},
+		&mockMailer{},
+		&mockRegistrationURLBuilder{},
+	)
+
+	_, err := svc.Verify(context.Background(), VerifyUserRegistrationInput{
+		Token: "plain-token",
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	appErr, ok := err.(*app_error.AppError)
+	if !ok {
+		t.Fatal("expected AppError")
+	}
+
+	if appErr.Code != i18n.CodeTokenExpired {
+		t.Fatalf("unexpected code: %s", appErr.Code)
+	}
+}
+
+func TestUserRegistrationServiceVerifyAlreadyVerified(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	repo := &mockUserRegistrationRequestRepository{
+		findByTokenHashResult: &model.UserRegistrationRequest{
+			ExpiresAt:  now.Add(time.Hour),
+			VerifiedAt: &now,
+		},
+	}
+
+	svc := newTestUserRegistrationService(
+		repo,
+		&mockTxManager{},
+		&mockTokenGenerator{},
+		&mockTokenHasher{},
+		&mockUUIDGenerator{},
+		&mockMailer{},
+		&mockRegistrationURLBuilder{},
+	)
+
+	_, err := svc.Verify(context.Background(), VerifyUserRegistrationInput{
+		Token: "plain-token",
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	appErr, ok := err.(*app_error.AppError)
+	if !ok {
+		t.Fatal("expected AppError")
+	}
+
+	if appErr.Code != i18n.CodeUserRegistrationAlreadyVerified {
+		t.Fatalf("unexpected code: %s", appErr.Code)
+	}
+}
+
+func TestUserRegistrationServiceVerifyFindByTokenHashError(t *testing.T) {
+	expectedErr := errors.New("find by token hash failed")
+
+	repo := &mockUserRegistrationRequestRepository{
+		findByTokenHashErr: expectedErr,
+	}
+
+	svc := newTestUserRegistrationService(
+		repo,
+		&mockTxManager{},
+		&mockTokenGenerator{},
+		&mockTokenHasher{},
+		&mockUUIDGenerator{},
+		&mockMailer{},
+		&mockRegistrationURLBuilder{},
+	)
+
+	_, err := svc.Verify(context.Background(), VerifyUserRegistrationInput{
+		Token: "plain-token",
+	})
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestUserRegistrationServiceVerifyHashError(t *testing.T) {
+	expectedErr := errors.New("hash failed")
+
+	svc := newTestUserRegistrationService(
+		&mockUserRegistrationRequestRepository{},
+		&mockTxManager{},
+		&mockTokenGenerator{},
+		&mockTokenHasher{err: expectedErr},
+		&mockUUIDGenerator{},
+		&mockMailer{},
+		&mockRegistrationURLBuilder{},
+	)
+
+	_, err := svc.Verify(context.Background(), VerifyUserRegistrationInput{
+		Token: "plain-token",
+	})
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func (m *mockConfig) RegistrationResendIntervalMinutes() int {
+	return 5
+}
+
+func (m *mockConfig30Minutes) RegistrationResendIntervalMinutes() int {
+	return 5
 }

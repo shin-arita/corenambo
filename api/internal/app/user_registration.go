@@ -26,7 +26,7 @@ func NewUserRegistrationHandler(db *sql.DB, cfg config.RegistrationConfig) *hand
 		token.SHA256Hasher{},
 		uuid.UUIDv7Generator{},
 		clock.SystemClock{},
-		&mail.NoopMailer{},
+		mail.NewSMTPMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom),
 		registrationurl.NewStaticBuilder(cfg.FrontendBaseURL),
 		cfg,
 	)

@@ -8,6 +8,7 @@ import (
 
 type UserRegistrationRequestRepository interface {
 	FindByEmail(ctx context.Context, email string) (*model.UserRegistrationRequest, error)
+	FindByTokenHash(ctx context.Context, tokenHash string) (*model.UserRegistrationRequest, error)
 	Create(ctx context.Context, entity *model.UserRegistrationRequest) error
 	UpdateToken(ctx context.Context, entity *model.UserRegistrationRequest) error
 }

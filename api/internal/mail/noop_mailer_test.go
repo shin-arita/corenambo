@@ -17,3 +17,12 @@ func TestNoopMailerSendUserRegistrationMail(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestNoopMailerSendUserAlreadyRegisteredMail(t *testing.T) {
+	m := &NoopMailer{}
+
+	err := m.SendUserAlreadyRegisteredMail(context.Background(), "test@example.com", "ja")
+	if err != nil {
+		t.Fatal(err)
+	}
+}

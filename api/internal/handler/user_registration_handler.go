@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"app-api/internal/app_error"
+	"app-api/internal/config"
 	"app-api/internal/i18n"
 	"app-api/internal/logger"
 	"app-api/internal/service"
@@ -11,18 +12,41 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const codeTooManyRequests = "TOO_MANY_REQUESTS"
+
 type UserRegistrationHandler struct {
-	service    service.UserRegistrationService
-	translator i18n.Translator
+	service         service.UserRegistrationService
+	translator      i18n.Translator
+	rateLimiter     *rateLimiter
+	rateLimitConfig config.RateLimitConfig
 }
 
 func NewUserRegistrationHandler(
 	service service.UserRegistrationService,
 	translator i18n.Translator,
 ) *UserRegistrationHandler {
+	rateLimitConfig := config.NewRateLimitConfig()
+
 	return &UserRegistrationHandler{
-		service:    service,
-		translator: translator,
+		service:         service,
+		translator:      translator,
+		rateLimiter:     newRateLimiter(newRedisRateLimitStore(rateLimitConfig.RedisAddr())),
+		rateLimitConfig: rateLimitConfig,
+	}
+}
+
+func NewUserRegistrationHandlerWithLimiter(
+	service service.UserRegistrationService,
+	translator i18n.Translator,
+	limiter *rateLimiter,
+) *UserRegistrationHandler {
+	rateLimitConfig := config.NewRateLimitConfig()
+
+	return &UserRegistrationHandler{
+		service:         service,
+		translator:      translator,
+		rateLimiter:     limiter,
+		rateLimitConfig: rateLimitConfig,
 	}
 }
 
@@ -43,6 +67,32 @@ func (h *UserRegistrationHandler) Create(c *gin.Context) {
 		appErr := app_error.NewBadRequest(i18n.CodeBadRequest)
 		c.JSON(appErr.StatusCode(), ToResponse(appErr, lang, h.translator))
 		return
+	}
+
+	if h.rateLimiter != nil {
+		if !h.rateLimiter.AllowIP(
+			c.Request.Context(),
+			c.ClientIP(),
+			h.rateLimitConfig.RateLimitIPPerMinute(),
+		) {
+			c.JSON(http.StatusTooManyRequests, ErrorResponse{
+				Code:    codeTooManyRequests,
+				Message: "リクエストが多すぎます。しばらく待ってから再度お試しください。",
+			})
+			return
+		}
+
+		if !h.rateLimiter.AllowEmail(
+			c.Request.Context(),
+			req.Email,
+			h.rateLimitConfig.RateLimitEmailPer5Min(),
+		) {
+			c.JSON(http.StatusTooManyRequests, ErrorResponse{
+				Code:    codeTooManyRequests,
+				Message: "リクエストが多すぎます。しばらく待ってから再度お試しください。",
+			})
+			return
+		}
 	}
 
 	output, err := h.service.Create(
