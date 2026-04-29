@@ -1,0 +1,5 @@
+CREATE ROLE app_user WITH LOGIN PASSWORD 'password';
+CREATE DATABASE app_db OWNER app_user;
+\c app_db
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS pgroonga;
