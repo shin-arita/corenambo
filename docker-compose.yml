@@ -50,11 +50,12 @@ services:
       RATE_LIMIT_IP_PER_MINUTE: ${RATE_LIMIT_IP_PER_MINUTE:-5}
       RATE_LIMIT_EMAIL_PER_5MIN: ${RATE_LIMIT_EMAIL_PER_5MIN:-1}
       CORS_ALLOW_ORIGIN: ${CORS_ALLOW_ORIGIN:-http://localhost:5173}
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-replace-me-access-secret}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-replace-me-refresh-secret}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
       JWT_ACCESS_EXPIRES_MINUTES: ${JWT_ACCESS_EXPIRES_MINUTES:-15}
       JWT_REFRESH_EXPIRES_HOURS: ${JWT_REFRESH_EXPIRES_HOURS:-168}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      WORKER_STUCK_TIMEOUT_MINUTES: ${WORKER_STUCK_TIMEOUT_MINUTES:-15}
     depends_on:
       db:
         condition: service_healthy
@@ -107,7 +108,6 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
-    container_name: corenambo-worker
     working_dir: /app
     volumes:
       - ./api:/app

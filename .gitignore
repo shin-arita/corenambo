@@ -1,12 +1,14 @@
 # OS
 .DS_Store
 
-# env
+# Environment
 .env
+.env.*
+!.env.example
 
 # Node
-node_modules
-frontend/node_modules
+node_modules/
+frontend/node_modules/
 
 # Build
 dist
@@ -16,9 +18,16 @@ build
 *.log
 
 # Go
-api/tmp
-
-# Other
-vendor
+api/tmp/
+api/dispatcher
+api/worker
 api/server
+
+# IDE
 .idea/
+
+# Archive
+*.zip
+
+# Vendor
+vendor

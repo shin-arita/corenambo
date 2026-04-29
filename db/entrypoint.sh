@@ -7,12 +7,13 @@ if [ "$(id -u)" = "0" ]; then
   exec gosu postgres "$0" "$@"
 fi
 
+# ★ 追加：初回のみinitdb
 if [ ! -s "$PGDATA/PG_VERSION" ]; then
   /usr/lib/postgresql/16/bin/initdb -D "$PGDATA"
 
   echo "host all all all scram-sha-256" >> "$PGDATA/pg_hba.conf"
 
-  /usr/lib/postgresql/16/bin/pg_ctl -D "$PGDATA" -o "-c listen_addresses='localhost'" -w start
+  /usr/lib/postgresql/16/bin/pg_ctl -D "$PGDATA" -o "-c listen_addresses='*'" -w start
 
   for f in /docker-entrypoint-initdb.d/*; do
     case "$f" in
@@ -28,4 +29,4 @@ if [ ! -s "$PGDATA/PG_VERSION" ]; then
   /usr/lib/postgresql/16/bin/pg_ctl -D "$PGDATA" -m fast -w stop
 fi
 
-exec "$@"
+exec /usr/lib/postgresql/16/bin/postgres -D "$PGDATA" -c listen_addresses="*"
