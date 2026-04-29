@@ -31,7 +31,6 @@ func TestRedisRateLimitStoreIncr(t *testing.T) {
 }
 
 func TestRedisRateLimitStoreIncrError(t *testing.T) {
-	// 存在しないポートに接続して強制エラー
 	store := newRedisRateLimitStore("localhost:0")
 
 	_, err := store.Incr(context.Background(), "test", time.Second)

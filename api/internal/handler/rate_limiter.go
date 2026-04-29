@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 )
@@ -37,7 +38,8 @@ func (r *rateLimiter) allow(ctx context.Context, key string, limit int, ttl time
 
 	count, err := r.store.Incr(ctx, key, ttl)
 	if err != nil {
-		return true
+		log.Printf("rate limiter error key=%s err=%v", key, err)
+		return false
 	}
 
 	return count <= int64(limit)

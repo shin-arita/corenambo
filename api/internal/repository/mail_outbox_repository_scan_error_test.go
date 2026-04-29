@@ -12,7 +12,6 @@ func TestMailOutboxRepositoryFetchPending_ScanError(t *testing.T) {
 	db, mock, _ := sqlmock.New()
 	defer func() { _ = db.Close() }()
 
-	// 型不一致でScanエラーを発生させる
 	rows := sqlmock.NewRows([]string{
 		"id", "mail_type", "to_email", "payload",
 		"status", "retry_count", "next_attempt_at",
@@ -23,7 +22,7 @@ func TestMailOutboxRepositoryFetchPending_ScanError(t *testing.T) {
 		"a@b.com",
 		"{}",
 		"pending",
-		"INVALID_INT", // ← ここでScanエラー
+		"INVALID_INT",
 		time.Now(),
 		nil,
 		nil,

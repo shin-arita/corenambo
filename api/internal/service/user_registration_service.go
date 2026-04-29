@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	"app-api/internal/clock"
 	"app-api/internal/config"
 	"app-api/internal/i18n"
-	"app-api/internal/mail"
 	"app-api/internal/model"
 	"app-api/internal/registrationurl"
 	"app-api/internal/repository"
@@ -49,7 +49,6 @@ type userRegistrationService struct {
 	tokenHasher                 token.Hasher
 	uuidGenerator               uuid.Generator
 	clock                       clock.Clock
-	mailer                      mail.Mailer
 	registrationURLBuilder      registrationurl.Builder
 	config                      config.Config
 }
@@ -62,7 +61,6 @@ func NewUserRegistrationService(
 	tokenHasher token.Hasher,
 	uuidGenerator uuid.Generator,
 	clock clock.Clock,
-	mailer mail.Mailer,
 	registrationURLBuilder registrationurl.Builder,
 	config config.Config,
 ) UserRegistrationService {
@@ -74,7 +72,6 @@ func NewUserRegistrationService(
 		tokenHasher:                 tokenHasher,
 		uuidGenerator:               uuidGenerator,
 		clock:                       clock,
-		mailer:                      mailer,
 		registrationURLBuilder:      registrationURLBuilder,
 		config:                      config,
 	}
@@ -89,6 +86,10 @@ func validateCreateInput(input CreateUserRegistrationInput) error {
 	if email == "" {
 		fieldErrors["email"] = append(fieldErrors["email"], app_error.FieldError{
 			Code: i18n.CodeEmailRequired,
+		})
+	} else if _, err := mail.ParseAddress(email); err != nil {
+		fieldErrors["email"] = append(fieldErrors["email"], app_error.FieldError{
+			Code: i18n.CodeEmailFormatInvalid,
 		})
 	}
 
@@ -129,16 +130,19 @@ func (s *userRegistrationService) Create(
 	}
 
 	if req != nil && req.VerifiedAt != nil {
-		if err := s.mailer.SendUserAlreadyRegisteredMail(ctx, input.Email, input.Language); err != nil {
-			return nil, err
-		}
-		return &CreateUserRegistrationOutput{Code: i18n.CodeUserRegistrationRequestCreated}, nil
+		return &CreateUserRegistrationOutput{
+			Code: i18n.CodeUserRegistrationRequestCreated,
+		}, nil
 	}
 
 	if req != nil && req.LastSentAt != nil {
-		resendAvailableAt := req.LastSentAt.Add(time.Duration(s.config.RegistrationResendIntervalMinutes()) * time.Minute)
+		resendAvailableAt := req.LastSentAt.Add(
+			time.Duration(s.config.RegistrationResendIntervalMinutes()) * time.Minute,
+		)
 		if now.Before(resendAvailableAt) {
-			return &CreateUserRegistrationOutput{Code: i18n.CodeUserRegistrationRequestCreated}, nil
+			return &CreateUserRegistrationOutput{
+				Code: i18n.CodeUserRegistrationRequestCreated,
+			}, nil
 		}
 	}
 
@@ -152,7 +156,11 @@ func (s *userRegistrationService) Create(
 		return nil, err
 	}
 
-	expiresAt := now.Add(time.Duration(s.config.RegistrationTokenExpiresMinutes()) * time.Minute)
+	expiresAt := now.Add(
+		time.Duration(s.config.RegistrationTokenExpiresMinutes()) * time.Minute,
+	)
+
+	registrationURL := s.registrationURLBuilder.Build(plainToken)
 
 	err = s.txManager.WithinTransaction(ctx, func(txCtx context.Context) error {
 
@@ -185,22 +193,18 @@ func (s *userRegistrationService) Create(
 			}
 		}
 
-		// ★ Outbox登録（TX内）
 		outboxID, err := s.uuidGenerator.NewV7()
 		if err != nil {
 			return err
 		}
 
-		payload, err := json.Marshal(map[string]string{
+		payload, _ := json.Marshal(map[string]string{
 			"email": input.Email,
-			"token": plainToken,
+			"url":   registrationURL,
 			"lang":  input.Language,
 		})
-		if err != nil {
-			return err
-		}
 
-		if err := s.mailOutboxRepo.Create(txCtx, &model.MailOutbox{
+		return s.mailOutboxRepo.Create(txCtx, &model.MailOutbox{
 			ID:            outboxID,
 			MailType:      "user_registration",
 			ToEmail:       input.Email,
@@ -210,25 +214,10 @@ func (s *userRegistrationService) Create(
 			NextAttemptAt: now,
 			CreatedAt:     now,
 			UpdatedAt:     now,
-		}); err != nil {
-			return err
-		}
-
-		return nil
+		})
 	})
+
 	if err != nil {
-		return nil, err
-	}
-
-	// ※ ここでは従来通り送信（後でdispatcherに完全移行）
-	registerURL := s.registrationURLBuilder.Build(plainToken)
-
-	if err := s.mailer.SendUserRegistrationMail(ctx, mail.UserRegistrationMail{
-		To:             input.Email,
-		URL:            registerURL,
-		Lang:           input.Language,
-		ExpiresMinutes: s.config.RegistrationTokenExpiresMinutes(),
-	}); err != nil {
 		return nil, err
 	}
 
@@ -241,6 +230,7 @@ func (s *userRegistrationService) Verify(
 	ctx context.Context,
 	input VerifyUserRegistrationInput,
 ) (*VerifyUserRegistrationOutput, error) {
+
 	return &VerifyUserRegistrationOutput{
 		Code: "OK",
 	}, nil

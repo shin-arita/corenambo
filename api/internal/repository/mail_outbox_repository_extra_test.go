@@ -68,3 +68,23 @@ func TestMailOutboxRepositoryMarkFailed(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestMailOutboxRepositoryResetStuckProcessing(t *testing.T) {
+	db, mock, _ := sqlmock.New()
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectExec("UPDATE mail_outboxes").
+		WithArgs(sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	repo := NewMailOutboxRepository(db)
+
+	err := repo.ResetStuckProcessing(context.Background(), time.Now().Add(-15*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

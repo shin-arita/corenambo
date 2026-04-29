@@ -19,8 +19,7 @@ func main() {
 	}
 
 	repo := repository.NewMailOutboxRepository(db)
-
-	// ★ pointer にする
+	
 	var mailer mail.Mailer = &mail.NoopMailer{}
 
 	ctx := context.Background()
@@ -32,7 +31,6 @@ func main() {
 
 	for _, p := range pending {
 
-		// ★ 正しい型に合わせる
 		msg := mail.UserRegistrationMail{
 			To: p.ToEmail,
 		}

@@ -91,8 +91,7 @@ func TestRateLimiterAllowWhenStoreError(t *testing.T) {
 		err: errors.New("redis error"),
 	}
 	limiter := newRateLimiter(store)
-
-	if !limiter.AllowIP(context.Background(), "127.0.0.1", 1) {
-		t.Fatal("request should be allowed on store error")
+	if limiter.AllowIP(context.Background(), "127.0.0.1", 1) {
+		t.Fatal("request should be denied on store error")
 	}
 }

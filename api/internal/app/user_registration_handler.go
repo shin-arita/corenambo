@@ -2,24 +2,30 @@ package app
 
 import (
 	"database/sql"
-	"net/http"
-
-	"github.com/gin-gonic/gin"
 
 	"app-api/internal/config"
+	"app-api/internal/handler"
+	"app-api/internal/i18n"
+	"app-api/internal/repository"
+
+	"github.com/gin-gonic/gin"
 )
 
-type UserRegistrationHandler struct{}
+type UserRegistrationHandler struct {
+	inner *handler.UserRegistrationHandler
+}
 
 func NewUserRegistrationHandler(
 	db *sql.DB,
 	cfg config.RegistrationConfig,
 ) *UserRegistrationHandler {
-	return &UserRegistrationHandler{}
+	txManager := &repository.PostgresTxManager{DB: db}
+	svc := NewUserRegistrationService(txManager, cfg)
+	translator := i18n.NewTranslator()
+	inner := handler.NewUserRegistrationHandler(svc, translator)
+	return &UserRegistrationHandler{inner: inner}
 }
 
 func (h *UserRegistrationHandler) Create(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"code": "OK",
-	})
+	h.inner.Create(c)
 }

@@ -58,3 +58,23 @@ func TestMailOutboxRepositoryCreate(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestMailOutboxRepositoryMarkProcessing(t *testing.T) {
+	db, mock, _ := sqlmock.New()
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectExec("UPDATE mail_outboxes").
+		WithArgs("id").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	repo := NewMailOutboxRepository(db)
+
+	err := repo.MarkProcessing(context.Background(), "id")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

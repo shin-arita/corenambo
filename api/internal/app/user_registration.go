@@ -1,20 +1,16 @@
 package app
 
 import (
+	"os"
+
 	"app-api/internal/clock"
 	"app-api/internal/config"
-	"app-api/internal/mail"
+	"app-api/internal/registrationurl"
 	"app-api/internal/repository"
 	"app-api/internal/service"
 	"app-api/internal/token"
 	"app-api/internal/uuid"
 )
-
-type dummyBuilder struct{}
-
-func (d dummyBuilder) Build(token string) string {
-	return "http://example.com/" + token
-}
 
 func NewUserRegistrationService(
 	db *repository.PostgresTxManager,
@@ -24,6 +20,11 @@ func NewUserRegistrationService(
 	userRepo := repository.NewUserRegistrationRequestRepository(db.DB)
 	outboxRepo := repository.NewMailOutboxRepository(db.DB)
 
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "http://localhost:5173"
+	}
+
 	return service.NewUserRegistrationService(
 		userRepo,
 		outboxRepo,
@@ -32,8 +33,7 @@ func NewUserRegistrationService(
 		token.SHA256Hasher{},
 		uuid.UUIDv7Generator{},
 		clock.SystemClock{},
-		&mail.NoopMailer{},
-		dummyBuilder{},
+		registrationurl.NewStaticBuilder(frontendURL),
 		cfg,
 	)
 }
