@@ -6,6 +6,7 @@ import (
 	"app-api/internal/config"
 	"app-api/internal/handler"
 	"app-api/internal/i18n"
+	"app-api/internal/mail"
 	"app-api/internal/repository"
 
 	"github.com/gin-gonic/gin"
@@ -22,6 +23,10 @@ func NewUserRegistrationHandler(
 	txManager := &repository.PostgresTxManager{DB: db}
 	svc := NewUserRegistrationService(txManager, cfg)
 	translator := i18n.NewTranslator()
+
+	// SMTP設定をcfgから取得
+	_ = mail.NewSMTPMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPUseTLS)
+
 	inner := handler.NewUserRegistrationHandler(svc, translator)
 	return &UserRegistrationHandler{inner: inner}
 }

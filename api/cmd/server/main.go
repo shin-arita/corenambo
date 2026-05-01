@@ -44,6 +44,13 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(corsMiddleware(serverCfg.GetCORSAllowOrigin()))
+
+	// requestサイズ制限: 1MB
+	router.Use(func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
+		c.Next()
+	})
+
 	router.Use(gin.CustomRecovery(func(c *gin.Context, recovered any) {
 		logger.Error(
 			"method=%s path=%s panic=%v stack=%s",

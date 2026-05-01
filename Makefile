@@ -24,3 +24,9 @@ front:
 
 migrate-up:
 	docker compose exec api sh -lc 'migrate -path /db/migrations -database "$$DATABASE_URL" up'
+
+test:
+	docker compose exec api go test ./... --cover
+
+test-cover:
+	docker compose exec api sh -c "go test ./... -coverprofile=/tmp/cover.out -coverpkg=$$(go list ./... | grep -v 'smtp_tls' | tr '\n' ',') && go tool cover -func=/tmp/cover.out"

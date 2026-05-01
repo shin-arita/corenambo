@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewSMTPMailer(t *testing.T) {
-	mailer := NewSMTPMailer("mail", "1025", "noreply@example.com")
+	mailer := NewSMTPMailer("mail", "1025", "noreply@example.com", "", "", false)
 
 	smtpMailer, ok := mailer.(*SMTPMailer)
 	if !ok {
@@ -87,6 +87,105 @@ func TestSMTPMailerSendUserRegistrationMail(t *testing.T) {
 
 	if !strings.Contains(capturedMsg, "Subject:") {
 		t.Fatal("subject not found")
+	}
+}
+
+func TestSMTPMailerSendUserRegistrationMailWithAuth(t *testing.T) {
+	var capturedAuth smtp.Auth
+
+	mailer := &SMTPMailer{
+		Host: "mail",
+		Port: "1025",
+		From: "noreply@example.com",
+		User: "user@example.com",
+		Pass: "secret",
+		sendMail: func(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
+			capturedAuth = a
+			return nil
+		},
+		tl: i18n.NewTranslator(),
+	}
+
+	err := mailer.SendUserRegistrationMail(context.Background(), UserRegistrationMail{
+		To:             "test@example.com",
+		URL:            "http://example.com/verify?token=abc",
+		Lang:           "ja",
+		ExpiresMinutes: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if capturedAuth == nil {
+		t.Fatal("auth should not be nil when User is set")
+	}
+}
+
+func TestSMTPMailerSendUserRegistrationMailWithTLS(t *testing.T) {
+	var capturedAddr string
+	var capturedAuth smtp.Auth
+
+	mailer := &SMTPMailer{
+		Host:   "mail",
+		Port:   "465",
+		From:   "noreply@example.com",
+		User:   "user@example.com",
+		Pass:   "secret",
+		UseTLS: true,
+		sendTLSMail: func(addr string, auth smtp.Auth, from string, to string, message []byte) error {
+			capturedAddr = addr
+			capturedAuth = auth
+			return nil
+		},
+		tl: i18n.NewTranslator(),
+	}
+
+	err := mailer.SendUserRegistrationMail(context.Background(), UserRegistrationMail{
+		To:             "test@example.com",
+		URL:            "http://example.com/verify?token=abc",
+		Lang:           "ja",
+		ExpiresMinutes: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if capturedAddr != "mail:465" {
+		t.Fatalf("unexpected addr: %s", capturedAddr)
+	}
+
+	if capturedAuth == nil {
+		t.Fatal("auth should not be nil when User is set")
+	}
+}
+
+func TestSMTPMailerSendUserRegistrationMailWithTLSNoAuth(t *testing.T) {
+	var capturedAuth smtp.Auth
+
+	mailer := &SMTPMailer{
+		Host:   "mail",
+		Port:   "465",
+		From:   "noreply@example.com",
+		UseTLS: true,
+		sendTLSMail: func(addr string, auth smtp.Auth, from string, to string, message []byte) error {
+			capturedAuth = auth
+			return nil
+		},
+		tl: i18n.NewTranslator(),
+	}
+
+	err := mailer.SendUserRegistrationMail(context.Background(), UserRegistrationMail{
+		To:             "test@example.com",
+		URL:            "http://example.com/verify?token=abc",
+		Lang:           "ja",
+		ExpiresMinutes: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if capturedAuth != nil {
+		t.Fatal("auth should be nil when User is not set")
 	}
 }
 

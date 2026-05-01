@@ -23,7 +23,7 @@ func main() {
 	}
 
 	repo := repository.NewMailOutboxRepository(db)
-	mailer := mail.NewSMTPMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom)
+	mailer := mail.NewSMTPMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPUseTLS)
 
 	stuckTimeout := time.Duration(cfg.WorkerStuckTimeoutMinutes()) * time.Minute
 

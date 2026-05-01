@@ -13,6 +13,9 @@ type WorkerConfig struct {
 	SMTPHost                   string
 	SMTPPort                   string
 	SMTPFrom                   string
+	SMTPUser                   string
+	SMTPPass                   string
+	SMTPUseTLS                 bool
 }
 
 func NewWorkerConfig() WorkerConfig {
@@ -57,6 +60,14 @@ func NewWorkerConfig() WorkerConfig {
 		smtpFrom = "noreply@example.com"
 	}
 
+	smtpUser := os.Getenv("SMTP_USER")
+	smtpPass := os.Getenv("SMTP_PASS")
+
+	smtpUseTLS := false
+	if v := os.Getenv("SMTP_USE_TLS"); v == "true" {
+		smtpUseTLS = true
+	}
+
 	return WorkerConfig{
 		DatabaseURL:                databaseURL,
 		StuckTimeoutMinutes:        stuckTimeoutMinutes,
@@ -65,6 +76,9 @@ func NewWorkerConfig() WorkerConfig {
 		SMTPHost:                   smtpHost,
 		SMTPPort:                   smtpPort,
 		SMTPFrom:                   smtpFrom,
+		SMTPUser:                   smtpUser,
+		SMTPPass:                   smtpPass,
+		SMTPUseTLS:                 smtpUseTLS,
 	}
 }
 

@@ -46,6 +46,9 @@ services:
       SMTP_HOST: mail
       SMTP_PORT: 1025
       SMTP_FROM: ${SMTP_FROM:-noreply@example.com}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
       REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
       RATE_LIMIT_IP_PER_MINUTE: ${RATE_LIMIT_IP_PER_MINUTE:-5}
       RATE_LIMIT_EMAIL_PER_5MIN: ${RATE_LIMIT_EMAIL_PER_5MIN:-1}
@@ -123,7 +126,15 @@ services:
     environment:
       TZ: ${TZ:-Asia/Tokyo}
       DATABASE_URL: postgres://${POSTGRES_USER:-app_user}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-app_db}?sslmode=disable
-
+      SMTP_HOST: ${SMTP_HOST:-mail}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_FROM: ${SMTP_FROM:-noreply@example.com}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      
 volumes:
   db_data:
   frontend_node_modules:

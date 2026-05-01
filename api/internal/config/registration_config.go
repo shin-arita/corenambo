@@ -12,6 +12,9 @@ type RegistrationConfig struct {
 	SMTPHost              string
 	SMTPPort              string
 	SMTPFrom              string
+	SMTPUser              string
+	SMTPPass              string
+	SMTPUseTLS            bool
 }
 
 func NewRegistrationConfig() RegistrationConfig {
@@ -49,6 +52,14 @@ func NewRegistrationConfig() RegistrationConfig {
 		smtpFrom = "noreply@example.com"
 	}
 
+	smtpUser := os.Getenv("SMTP_USER")
+	smtpPass := os.Getenv("SMTP_PASS")
+
+	smtpUseTLS := false
+	if v := os.Getenv("SMTP_USE_TLS"); v == "true" {
+		smtpUseTLS = true
+	}
+
 	return RegistrationConfig{
 		TokenExpiresMinutes:   expiresMinutes,
 		ResendIntervalMinutes: resendIntervalMinutes,
@@ -56,6 +67,9 @@ func NewRegistrationConfig() RegistrationConfig {
 		SMTPHost:              smtpHost,
 		SMTPPort:              smtpPort,
 		SMTPFrom:              smtpFrom,
+		SMTPUser:              smtpUser,
+		SMTPPass:              smtpPass,
+		SMTPUseTLS:            smtpUseTLS,
 	}
 }
 

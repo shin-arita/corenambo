@@ -10,20 +10,28 @@ import (
 )
 
 type SMTPMailer struct {
-	Host     string
-	Port     string
-	From     string
-	sendMail func(addr string, a smtp.Auth, from string, to []string, msg []byte) error
-	tl       i18n.Translator
+	Host        string
+	Port        string
+	From        string
+	User        string
+	Pass        string
+	UseTLS      bool
+	sendMail    func(addr string, a smtp.Auth, from string, to []string, msg []byte) error
+	sendTLSMail func(addr string, auth smtp.Auth, from string, to string, message []byte) error
+	tl          i18n.Translator
 }
 
-func NewSMTPMailer(host string, port string, from string) Mailer {
+func NewSMTPMailer(host, port, from, user, pass string, useTLS bool) Mailer {
 	return &SMTPMailer{
-		Host:     host,
-		Port:     port,
-		From:     from,
-		sendMail: smtp.SendMail,
-		tl:       i18n.NewTranslator(),
+		Host:        host,
+		Port:        port,
+		From:        from,
+		User:        user,
+		Pass:        pass,
+		UseTLS:      useTLS,
+		sendMail:    smtp.SendMail,
+		sendTLSMail: defaultSendWithTLS,
+		tl:          i18n.NewTranslator(),
 	}
 }
 
@@ -70,11 +78,18 @@ func (m *SMTPMailer) send(to string, subjectText string, body string) error {
 			body,
 	)
 
-	return m.sendMail(
-		m.Host+":"+m.Port,
-		nil,
-		m.From,
-		[]string{to},
-		message,
-	)
+	addr := m.Host + ":" + m.Port
+
+	// 認証情報が設定されている場合のみ認証を使用（開発/本番切替）
+	var auth smtp.Auth
+	if m.User != "" {
+		auth = smtp.PlainAuth("", m.User, m.Pass, m.Host)
+	}
+
+	if m.UseTLS {
+		return m.sendTLSMail(addr, auth, m.From, to, message)
+	}
+
+	// 開発環境（Mailpit等）: 認証なし・TLSなし
+	return m.sendMail(addr, auth, m.From, []string{to}, message)
 }

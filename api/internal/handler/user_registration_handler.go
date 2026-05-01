@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"app-api/internal/app_error"
 	"app-api/internal/config"
@@ -55,11 +56,19 @@ type CreateUserRegistrationRequest struct {
 	EmailConfirmation string `json:"email_confirmation"`
 }
 
-func (h *UserRegistrationHandler) Create(c *gin.Context) {
-	lang := c.GetHeader("Accept-Language")
-	if lang == "" {
-		lang = "ja"
+// normalizeLanguage はAccept-Languageヘッダーを許可リスト方式で正規化する
+// ja/en のみ受け付け、それ以外はjaにフォールバックする
+func normalizeLanguage(lang string) string {
+	switch {
+	case strings.HasPrefix(lang, "en"):
+		return "en"
+	default:
+		return "ja"
 	}
+}
+
+func (h *UserRegistrationHandler) Create(c *gin.Context) {
+	lang := normalizeLanguage(c.GetHeader("Accept-Language"))
 
 	var req CreateUserRegistrationRequest
 

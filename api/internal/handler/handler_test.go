@@ -308,3 +308,53 @@ func TestToResponse(t *testing.T) {
 		t.Fatal("errors empty")
 	}
 }
+
+func TestUserRegistrationHandlerCreateEnglishLanguage(t *testing.T) {
+	svc := &mockService{
+		out: &service.CreateUserRegistrationOutput{
+			Code: i18n.CodeUserRegistrationRequestCreated,
+		},
+	}
+
+	h := newTestHandler(svc)
+	r := newRouter(h)
+
+	body := `{"email":"test@example.com","email_confirmation":"test@example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept-Language", "en-US")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatal(w.Code)
+	}
+
+	if svc.input.Language != "en" {
+		t.Fatalf("unexpected language: %s", svc.input.Language)
+	}
+}
+
+func TestNormalizeLanguage(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"ja", "ja"},
+		{"en", "en"},
+		{"en-US", "en"},
+		{"en-GB", "en"},
+		{"fr", "ja"},
+		{"zh", "ja"},
+		{"", "ja"},
+		{"<script>", "ja"},
+	}
+
+	for _, tt := range tests {
+		got := normalizeLanguage(tt.input)
+		if got != tt.expected {
+			t.Fatalf("normalizeLanguage(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}

@@ -392,3 +392,52 @@ func TestServerConfigMethods(t *testing.T) {
 		t.Fatalf("unexpected port: %s", c.GetPort())
 	}
 }
+
+func TestNewRegistrationConfigSMTPTLS(t *testing.T) {
+	t.Setenv("REGISTRATION_TOKEN_EXPIRES_MINUTES", "")
+	t.Setenv("REGISTRATION_RESEND_INTERVAL_MINUTES", "")
+	t.Setenv("FRONTEND_BASE_URL", "")
+	t.Setenv("SMTP_HOST", "smtp.example.com")
+	t.Setenv("SMTP_PORT", "465")
+	t.Setenv("SMTP_FROM", "noreply@example.com")
+	t.Setenv("SMTP_USER", "user@example.com")
+	t.Setenv("SMTP_PASS", "secret")
+	t.Setenv("SMTP_USE_TLS", "true")
+
+	c := NewRegistrationConfig()
+
+	if c.SMTPUser != "user@example.com" {
+		t.Fatalf("unexpected smtp user: %s", c.SMTPUser)
+	}
+	if c.SMTPPass != "secret" {
+		t.Fatalf("unexpected smtp pass: %s", c.SMTPPass)
+	}
+	if !c.SMTPUseTLS {
+		t.Fatal("expected smtp use tls to be true")
+	}
+}
+
+func TestNewWorkerConfigSMTPTLS(t *testing.T) {
+	t.Setenv("DATABASE_URL", "")
+	t.Setenv("WORKER_STUCK_TIMEOUT_MINUTES", "")
+	t.Setenv("REGISTRATION_TOKEN_EXPIRES_MINUTES", "")
+	t.Setenv("WORKER_MAX_RETRY_COUNT", "")
+	t.Setenv("SMTP_HOST", "smtp.example.com")
+	t.Setenv("SMTP_PORT", "465")
+	t.Setenv("SMTP_FROM", "noreply@example.com")
+	t.Setenv("SMTP_USER", "user@example.com")
+	t.Setenv("SMTP_PASS", "secret")
+	t.Setenv("SMTP_USE_TLS", "true")
+
+	c := NewWorkerConfig()
+
+	if c.SMTPUser != "user@example.com" {
+		t.Fatalf("unexpected smtp user: %s", c.SMTPUser)
+	}
+	if c.SMTPPass != "secret" {
+		t.Fatalf("unexpected smtp pass: %s", c.SMTPPass)
+	}
+	if !c.SMTPUseTLS {
+		t.Fatal("expected smtp use tls to be true")
+	}
+}
