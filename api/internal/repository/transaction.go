@@ -6,14 +6,22 @@ import (
 )
 
 type PostgresTxManager struct {
-	DB *sql.DB
+	db *sql.DB
+}
+
+func NewPostgresTxManager(db *sql.DB) *PostgresTxManager {
+	return &PostgresTxManager{db: db}
+}
+
+func (m *PostgresTxManager) SQLDb() *sql.DB {
+	return m.db
 }
 
 func (m *PostgresTxManager) WithinTransaction(
 	ctx context.Context,
 	fn func(txCtx context.Context) error,
 ) error {
-	tx, err := m.DB.BeginTx(ctx, nil)
+	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}

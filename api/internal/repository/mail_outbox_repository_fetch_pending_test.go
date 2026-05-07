@@ -17,7 +17,7 @@ func TestFetchPending_Error(t *testing.T) {
 
 	r := NewMailOutboxRepository(db)
 
-	mock.ExpectQuery("SELECT").
+	mock.ExpectQuery("UPDATE").
 		WillReturnError(sql.ErrConnDone)
 
 	_, err = r.FetchPending(context.Background(), 10)

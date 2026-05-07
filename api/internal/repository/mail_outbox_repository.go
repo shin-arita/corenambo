@@ -27,14 +27,18 @@ func NewMailOutboxRepository(db *sql.DB) MailOutboxRepository {
 
 func (r *mailOutboxRepository) FetchPending(ctx context.Context, limit int) ([]*model.MailOutbox, error) {
 	rows, err := r.db.QueryContext(ctx, `
-SELECT id, mail_type, to_email, payload, status, retry_count, next_attempt_at,
-       sent_at, last_error, created_at, updated_at
-FROM mail_outboxes
-WHERE status = 'pending'
-  AND next_attempt_at <= NOW()
-ORDER BY created_at
-FOR UPDATE SKIP LOCKED
-LIMIT $1
+UPDATE mail_outboxes
+SET status = 'processing', updated_at = NOW()
+WHERE id IN (
+    SELECT id FROM mail_outboxes
+    WHERE status = 'pending'
+      AND next_attempt_at <= NOW()
+    ORDER BY created_at
+    LIMIT $1
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING id, mail_type, to_email, payload, status, retry_count, next_attempt_at,
+          sent_at, last_error, created_at, updated_at
 `, limit)
 	if err != nil {
 		return nil, err
@@ -61,7 +65,7 @@ LIMIT $1
 		}
 		results = append(results, m)
 	}
-	return results, nil
+	return results, rows.Err()
 }
 
 func (r *mailOutboxRepository) MarkProcessing(ctx context.Context, id string) error {
@@ -78,6 +82,7 @@ func (r *mailOutboxRepository) MarkSent(ctx context.Context, id string, sentAt t
 UPDATE mail_outboxes
 SET status = 'sent',
     sent_at = $2,
+    payload = '{}',
     updated_at = $2
 WHERE id = $1
 `, id, sentAt)

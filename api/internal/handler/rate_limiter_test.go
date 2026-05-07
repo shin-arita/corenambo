@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"testing"
 	"time"
@@ -64,7 +66,9 @@ func TestRateLimiterAllowEmail(t *testing.T) {
 		t.Fatal("second request should be denied")
 	}
 
-	if store.key != "rate_limit:email:test@example.com" {
+	h := sha256.Sum256([]byte("test@example.com"))
+	expectedKey := "rate_limit:email:" + hex.EncodeToString(h[:])
+	if store.key != expectedKey {
 		t.Fatalf("unexpected key: %s", store.key)
 	}
 

@@ -7,6 +7,12 @@ import (
 	"net/smtp"
 )
 
+func defaultDialTLS(network, addr string, cfg *tls.Config) (net.Conn, error) {
+	return tls.Dial(network, addr, cfg)
+}
+
+var dialTLSFunc = defaultDialTLS
+
 // defaultSendWithTLS はSMTPS（ポート465）で直接TLS接続してメールを送信する
 // 実際のTLS接続が必要なためユニットテストはsendTLSMailフィールドでモックすること
 func defaultSendWithTLS(addr string, auth smtp.Auth, from string, to string, message []byte) error {
@@ -19,7 +25,7 @@ func defaultSendWithTLS(addr string, auth smtp.Auth, from string, to string, mes
 		ServerName: host,
 	}
 
-	conn, err := tls.Dial("tcp", addr, tlsCfg)
+	conn, err := dialTLSFunc("tcp", addr, tlsCfg)
 	if err != nil {
 		return fmt.Errorf("smtp tls dial: %w", err)
 	}

@@ -19,7 +19,7 @@ func main() {
 	}
 
 	repo := repository.NewMailOutboxRepository(db)
-	
+
 	var mailer mail.Mailer = &mail.NoopMailer{}
 
 	ctx := context.Background()

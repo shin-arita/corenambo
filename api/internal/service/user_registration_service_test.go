@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -185,12 +186,47 @@ func TestCreate_UpdateTokenError(t *testing.T) {
 	}
 }
 
+func TestCreate_MarshalError(t *testing.T) {
+	orig := jsonMarshal
+	jsonMarshal = func(v any) ([]byte, error) {
+		return nil, errors.New("mock marshal error")
+	}
+	t.Cleanup(func() { jsonMarshal = orig })
+
+	svc := newTestUserRegistrationService()
+	_, err := svc.Create(context.Background(), CreateUserRegistrationInput{
+		Email:             "test@example.com",
+		EmailConfirmation: "test@example.com",
+		Language:          "ja",
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestCreate_EmailNormalized(t *testing.T) {
+	repo := &captureCreateRepo{}
+	svc := newTestUserRegistrationServiceWithCaptureRepo(repo)
+
+	_, err := svc.Create(context.Background(), CreateUserRegistrationInput{
+		Email:             "Test@Example.com",
+		EmailConfirmation: "test@example.com",
+		Language:          "ja",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.capturedEmail != "test@example.com" {
+		t.Fatalf("expected test@example.com, got %s", repo.capturedEmail)
+	}
+}
+
 func TestVerify(t *testing.T) {
 	svc := newTestUserRegistrationService()
 	_, err := svc.Verify(context.Background(), VerifyUserRegistrationInput{
 		Token: "token",
 	})
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatal("expected error: Verify is not implemented")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"net/smtp"
+	"strings"
 	"text/template"
 
 	"app-api/internal/i18n"
@@ -63,7 +64,14 @@ func (m *SMTPMailer) SendUserAlreadyRegisteredMail(ctx context.Context, to strin
 	return m.send(to, subjectText, bodyText)
 }
 
+func sanitizeHeader(s string) string {
+	return strings.NewReplacer("\r", "", "\n", "").Replace(s)
+}
+
 func (m *SMTPMailer) send(to string, subjectText string, body string) error {
+	to = sanitizeHeader(to)
+	subjectText = sanitizeHeader(subjectText)
+
 	from := "From: " + m.From + "\r\n"
 	toHeader := "To: " + to + "\r\n"
 	subject := "Subject: " + subjectText + "\r\n"

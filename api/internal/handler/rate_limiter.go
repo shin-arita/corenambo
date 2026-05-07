@@ -2,10 +2,13 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
-	"log"
 	"strings"
 	"time"
+
+	"app-api/internal/logger"
 )
 
 type rateLimiter struct {
@@ -26,7 +29,8 @@ func (r *rateLimiter) AllowIP(ctx context.Context, ip string, limit int) bool {
 
 func (r *rateLimiter) AllowEmail(ctx context.Context, email string, limit int) bool {
 	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
-	key := fmt.Sprintf("rate_limit:email:%s", normalizedEmail)
+	h := sha256.Sum256([]byte(normalizedEmail))
+	key := fmt.Sprintf("rate_limit:email:%s", hex.EncodeToString(h[:]))
 
 	return r.allow(ctx, key, limit, 5*time.Minute)
 }
@@ -38,7 +42,7 @@ func (r *rateLimiter) allow(ctx context.Context, key string, limit int, ttl time
 
 	count, err := r.store.Incr(ctx, key, ttl)
 	if err != nil {
-		log.Printf("rate limiter error key=%s err=%v", key, err)
+		logger.Error("rate limiter error key=%s err=%v", key, err)
 		return false
 	}
 

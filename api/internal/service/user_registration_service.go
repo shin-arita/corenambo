@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/mail"
 	"strings"
 	"time"
@@ -17,6 +18,8 @@ import (
 	"app-api/internal/token"
 	"app-api/internal/uuid"
 )
+
+var jsonMarshal = json.Marshal
 
 type UserRegistrationService interface {
 	Create(ctx context.Context, input CreateUserRegistrationInput) (*CreateUserRegistrationOutput, error)
@@ -80,8 +83,8 @@ func NewUserRegistrationService(
 func validateCreateInput(input CreateUserRegistrationInput) error {
 	fieldErrors := map[string][]app_error.FieldError{}
 
-	email := strings.TrimSpace(input.Email)
-	emailConfirmation := strings.TrimSpace(input.EmailConfirmation)
+	email := strings.ToLower(strings.TrimSpace(input.Email))
+	emailConfirmation := strings.ToLower(strings.TrimSpace(input.EmailConfirmation))
 
 	if email == "" {
 		fieldErrors["email"] = append(fieldErrors["email"], app_error.FieldError{
@@ -119,8 +122,8 @@ func (s *userRegistrationService) Create(
 		return nil, err
 	}
 
-	input.Email = strings.TrimSpace(input.Email)
-	input.EmailConfirmation = strings.TrimSpace(input.EmailConfirmation)
+	input.Email = strings.ToLower(strings.TrimSpace(input.Email))
+	input.EmailConfirmation = strings.ToLower(strings.TrimSpace(input.EmailConfirmation))
 
 	now := s.clock.Now()
 
@@ -198,11 +201,14 @@ func (s *userRegistrationService) Create(
 			return err
 		}
 
-		payload, _ := json.Marshal(map[string]string{
+		payload, err := jsonMarshal(map[string]string{
 			"email": input.Email,
 			"url":   registrationURL,
 			"lang":  input.Language,
 		})
+		if err != nil {
+			return err
+		}
 
 		return s.mailOutboxRepo.Create(txCtx, &model.MailOutbox{
 			ID:            outboxID,
@@ -231,7 +237,5 @@ func (s *userRegistrationService) Verify(
 	input VerifyUserRegistrationInput,
 ) (*VerifyUserRegistrationOutput, error) {
 
-	return &VerifyUserRegistrationOutput{
-		Code: "OK",
-	}, nil
+	return nil, app_error.NewInternal(errors.New("Verify: not implemented"))
 }

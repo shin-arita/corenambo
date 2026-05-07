@@ -52,8 +52,8 @@ func NewUserRegistrationHandlerWithLimiter(
 }
 
 type CreateUserRegistrationRequest struct {
-	Email             string `json:"email"`
-	EmailConfirmation string `json:"email_confirmation"`
+	Email             string `json:"email" binding:"max=255"`
+	EmailConfirmation string `json:"email_confirmation" binding:"max=255"`
 }
 
 // normalizeLanguage はAccept-Languageヘッダーを許可リスト方式で正規化する

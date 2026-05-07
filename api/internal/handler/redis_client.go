@@ -27,7 +27,7 @@ func (s *redisRateLimitStore) Incr(ctx context.Context, key string, ttl time.Dur
 	pipe := s.client.TxPipeline()
 
 	incr := pipe.Incr(ctx, key)
-	pipe.Expire(ctx, key, ttl)
+	pipe.ExpireNX(ctx, key, ttl)
 
 	_, err := pipe.Exec(ctx)
 	if err != nil {

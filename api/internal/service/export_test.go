@@ -220,6 +220,24 @@ type dummyErrorTokenHasher struct{}
 
 func (d dummyErrorTokenHasher) Hash(s string) (string, error) { return "", errors.New("hash error") }
 
+type captureCreateRepo struct {
+	capturedEmail string
+}
+
+func (d *captureCreateRepo) FindByEmail(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *captureCreateRepo) Create(ctx context.Context, req *model.UserRegistrationRequest) error {
+	d.capturedEmail = req.Email
+	return nil
+}
+func (d *captureCreateRepo) UpdateToken(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *captureCreateRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+
 type dummyURL struct{}
 
 func (d dummyURL) Build(s string) string { return "url" }
@@ -358,6 +376,20 @@ func newTestUserRegistrationServiceWithSecondUUIDError() UserRegistrationService
 func newTestUserRegistrationServiceWithCreateUserError() UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyErrorCreateUserRepo{},
+		&dummyOutboxRepo{},
+		&dummyTx{},
+		dummyTokenGen{},
+		dummyTokenHasher{},
+		dummyUUID{},
+		dummyClock{},
+		dummyURL{},
+		dummyConfig{},
+	)
+}
+
+func newTestUserRegistrationServiceWithCaptureRepo(repo *captureCreateRepo) UserRegistrationService {
+	return NewUserRegistrationService(
+		repo,
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyTokenGen{},

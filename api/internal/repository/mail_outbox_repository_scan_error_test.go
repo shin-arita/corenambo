@@ -30,7 +30,7 @@ func TestMailOutboxRepositoryFetchPending_ScanError(t *testing.T) {
 		time.Now(),
 	)
 
-	mock.ExpectQuery("SELECT .* FROM mail_outboxes").
+	mock.ExpectQuery("UPDATE mail_outboxes").
 		WithArgs(10).
 		WillReturnRows(rows)
 

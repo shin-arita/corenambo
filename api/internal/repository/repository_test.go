@@ -273,7 +273,7 @@ func TestPostgresTxManagerWithinTransaction(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectCommit()
 
-	m := &PostgresTxManager{DB: db}
+	m := NewPostgresTxManager(db)
 
 	err = m.WithinTransaction(context.Background(), func(txCtx context.Context) error {
 		if getExecutor(txCtx, db) == db {
@@ -301,7 +301,7 @@ func TestPostgresTxManagerWithinTransactionBeginError(t *testing.T) {
 
 	mock.ExpectBegin().WillReturnError(expectedErr)
 
-	m := &PostgresTxManager{DB: db}
+	m := NewPostgresTxManager(db)
 
 	err = m.WithinTransaction(context.Background(), func(txCtx context.Context) error {
 		t.Fatal("should not be called")
@@ -328,7 +328,7 @@ func TestPostgresTxManagerWithinTransactionRollback(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectRollback()
 
-	m := &PostgresTxManager{DB: db}
+	m := NewPostgresTxManager(db)
 
 	err = m.WithinTransaction(context.Background(), func(txCtx context.Context) error {
 		return expectedErr
@@ -354,7 +354,7 @@ func TestPostgresTxManagerWithinTransactionCommitError(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectCommit().WillReturnError(expectedErr)
 
-	m := &PostgresTxManager{DB: db}
+	m := NewPostgresTxManager(db)
 
 	err = m.WithinTransaction(context.Background(), func(txCtx context.Context) error {
 		return nil
@@ -384,6 +384,19 @@ func TestGetExecutorWithoutTx(t *testing.T) {
 
 func TestTxManagerInterface(t *testing.T) {
 	var _ TxManager = &PostgresTxManager{}
+}
+
+func TestPostgresTxManagerSQLDb(t *testing.T) {
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	m := NewPostgresTxManager(db)
+	if m.SQLDb() != db {
+		t.Fatal("SQLDb should return the underlying *sql.DB")
+	}
 }
 
 func TestUserRegistrationRequestRepositoryInterface(t *testing.T) {

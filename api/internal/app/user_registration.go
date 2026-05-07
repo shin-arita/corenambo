@@ -1,8 +1,6 @@
 package app
 
 import (
-	"os"
-
 	"app-api/internal/clock"
 	"app-api/internal/config"
 	"app-api/internal/registrationurl"
@@ -14,16 +12,11 @@ import (
 
 func NewUserRegistrationService(
 	db *repository.PostgresTxManager,
-	cfg config.Config,
+	cfg config.RegistrationConfig,
 ) service.UserRegistrationService {
 
-	userRepo := repository.NewUserRegistrationRequestRepository(db.DB)
-	outboxRepo := repository.NewMailOutboxRepository(db.DB)
-
-	frontendURL := os.Getenv("FRONTEND_URL")
-	if frontendURL == "" {
-		frontendURL = "http://localhost:5173"
-	}
+	userRepo := repository.NewUserRegistrationRequestRepository(db.SQLDb())
+	outboxRepo := repository.NewMailOutboxRepository(db.SQLDb())
 
 	return service.NewUserRegistrationService(
 		userRepo,
@@ -33,7 +26,7 @@ func NewUserRegistrationService(
 		token.SHA256Hasher{},
 		uuid.UUIDv7Generator{},
 		clock.SystemClock{},
-		registrationurl.NewStaticBuilder(frontendURL),
+		registrationurl.NewStaticBuilder(cfg.FrontendBaseURL),
 		cfg,
 	)
 }

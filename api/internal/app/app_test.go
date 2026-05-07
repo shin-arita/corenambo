@@ -18,7 +18,7 @@ import (
 
 func TestNewUserRegistrationService(t *testing.T) {
 	db := &sql.DB{}
-	txManager := &repository.PostgresTxManager{DB: db}
+	txManager := repository.NewPostgresTxManager(db)
 
 	svc := NewUserRegistrationService(txManager, config.RegistrationConfig{})
 
@@ -57,7 +57,7 @@ func TestUserRegistrationHandlerCreate(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	txManager := &repository.PostgresTxManager{DB: db}
+	txManager := repository.NewPostgresTxManager(db)
 	svc := NewUserRegistrationService(txManager, config.RegistrationConfig{})
 	translator := i18n.NewTranslator()
 	h := handler.NewUserRegistrationHandlerWithLimiter(svc, translator, nil)

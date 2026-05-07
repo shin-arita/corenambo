@@ -22,7 +22,7 @@ func TestMailOutboxRepositoryFetchPending(t *testing.T) {
 		nil, nil, time.Now(), time.Now(),
 	)
 
-	mock.ExpectQuery("SELECT .* FROM mail_outboxes").
+	mock.ExpectQuery("UPDATE mail_outboxes").
 		WithArgs(10).
 		WillReturnRows(rows)
 

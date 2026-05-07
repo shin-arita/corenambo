@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS uq_user_registration_requests_email;
