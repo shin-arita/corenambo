@@ -33,7 +33,8 @@ type CreateUserRegistrationInput struct {
 }
 
 type CreateUserRegistrationOutput struct {
-	Code string
+	Code           string
+	ExpiresMinutes int
 }
 
 type VerifyUserRegistrationInput struct {
@@ -134,7 +135,8 @@ func (s *userRegistrationService) Create(
 
 	if req != nil && req.VerifiedAt != nil {
 		return &CreateUserRegistrationOutput{
-			Code: i18n.CodeUserRegistrationRequestCreated,
+			Code:           i18n.CodeUserRegistrationRequestCreated,
+			ExpiresMinutes: s.config.RegistrationTokenExpiresMinutes(),
 		}, nil
 	}
 
@@ -144,7 +146,8 @@ func (s *userRegistrationService) Create(
 		)
 		if now.Before(resendAvailableAt) {
 			return &CreateUserRegistrationOutput{
-				Code: i18n.CodeUserRegistrationRequestCreated,
+				Code:           i18n.CodeUserRegistrationRequestCreated,
+				ExpiresMinutes: s.config.RegistrationTokenExpiresMinutes(),
 			}, nil
 		}
 	}
@@ -152,6 +155,9 @@ func (s *userRegistrationService) Create(
 	plainToken, err := s.tokenGenerator.Generate()
 	if err != nil {
 		return nil, err
+	}
+	if plainToken == "" {
+		return nil, errors.New("token generator returned empty token")
 	}
 
 	tokenHash, err := s.tokenHasher.Hash(plainToken)
@@ -228,7 +234,8 @@ func (s *userRegistrationService) Create(
 	}
 
 	return &CreateUserRegistrationOutput{
-		Code: i18n.CodeUserRegistrationRequestCreated,
+		Code:           i18n.CodeUserRegistrationRequestCreated,
+		ExpiresMinutes: s.config.RegistrationTokenExpiresMinutes(),
 	}, nil
 }
 

@@ -17,5 +17,5 @@ func NewStaticBuilder(frontendBaseURL string) Builder {
 }
 
 func (b *StaticBuilder) Build(token string) string {
-	return fmt.Sprintf("%s/user-registration/verify?token=%s", b.FrontendBaseURL, token)
+	return fmt.Sprintf("%s/registration/verify?token=%s", b.FrontendBaseURL, token)
 }

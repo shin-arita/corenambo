@@ -14,6 +14,9 @@ frontend/node_modules/
 dist
 build
 
+# Test coverage output
+frontend/coverage/
+
 # Logs
 *.log
 
@@ -22,6 +25,7 @@ api/tmp/
 api/dispatcher
 api/worker
 api/server
+api/*.deb
 
 # IDE
 .idea/
@@ -31,3 +35,6 @@ api/server
 
 # Vendor
 vendor
+
+# Claude Code local settings
+.claude/

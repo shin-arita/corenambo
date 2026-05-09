@@ -3,6 +3,7 @@ package mail
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/smtp"
 	"strings"
 	"text/template"
@@ -37,6 +38,10 @@ func NewSMTPMailer(host, port, from, user, pass string, useTLS bool) Mailer {
 }
 
 func (m *SMTPMailer) SendUserRegistrationMail(ctx context.Context, mailData UserRegistrationMail) error {
+	if mailData.URL == "" {
+		return errors.New("registration URL is empty")
+	}
+
 	subjectText := m.tl.Translate(mailData.Lang, i18n.CodeMailUserRegistrationSubject)
 	bodyTemplate := m.tl.Translate(mailData.Lang, i18n.CodeMailUserRegistrationBody)
 

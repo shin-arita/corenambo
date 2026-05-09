@@ -53,6 +53,28 @@
 
 ---
 
+### payload スキーマ
+
+`mail_outboxes.payload` は JSON 文字列として保存する。
+
+```json
+{
+  "email": "user@example.com",
+  "url": "https://example.com/registration/verify?token=xxx",
+  "lang": "ja",
+  "expires_minutes": 60
+}
+```
+
+| フィールド           | 型       | 説明                       |
+|----------------|---------|--------------------------|
+| email          | string  | 送信先メールアドレス              |
+| url            | string  | 本登録URL（生トークン付き）         |
+| lang           | string  | メール送信言語（`ja` / `en`）    |
+| expires_minutes | integer | 本登録URLの有効期限（分）          |
+
+---
+
 ## 5. token
 
 - Generator：ランダム生成
@@ -63,7 +85,7 @@
 ## 6. URL
 
 ```text
-/user-registration/verify?token=xxx
+/registration/verify?token=xxx
 ```
 
 ---

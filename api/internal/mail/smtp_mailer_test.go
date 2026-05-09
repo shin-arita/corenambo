@@ -265,7 +265,7 @@ func TestSMTPMailerSendUserRegistrationMailTemplateExecuteError(t *testing.T) {
 	}
 }
 
-func TestSMTPMailerSendUserAlreadyRegisteredMail(t *testing.T) {
+func TestSMTPMailerSendUserRegistrationMail_URLWithTokenInBody(t *testing.T) {
 	var capturedMsg string
 
 	mailer := &SMTPMailer{
@@ -279,12 +279,127 @@ func TestSMTPMailerSendUserAlreadyRegisteredMail(t *testing.T) {
 		tl: i18n.NewTranslator(),
 	}
 
+	fullURL := "http://localhost:5173/registration/verify?token=abc123XYZ"
+	err := mailer.SendUserRegistrationMail(context.Background(), UserRegistrationMail{
+		To:             "test@example.com",
+		URL:            fullURL,
+		Lang:           "ja",
+		ExpiresMinutes: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(capturedMsg, fullURL) {
+		t.Fatalf("email body does not contain full URL with token: %s", capturedMsg)
+	}
+	if strings.Contains(capturedMsg, "token=\r\n") || strings.Contains(capturedMsg, "token=\n") {
+		t.Fatal("email body contains URL with empty token")
+	}
+}
+
+func TestSMTPMailerSendUserRegistrationMail_EmptyURLReturnsError(t *testing.T) {
+	mailer := &SMTPMailer{
+		Host:     "mail",
+		Port:     "1025",
+		From:     "noreply@example.com",
+		sendMail: func(addr string, _ smtp.Auth, from string, to []string, msg []byte) error { return nil },
+		tl:       i18n.NewTranslator(),
+	}
+
+	err := mailer.SendUserRegistrationMail(context.Background(), UserRegistrationMail{
+		To:             "test@example.com",
+		URL:            "",
+		Lang:           "ja",
+		ExpiresMinutes: 60,
+	})
+	if err == nil {
+		t.Fatal("expected error when URL is empty")
+	}
+}
+
+func TestSMTPMailerSendUserRegistrationMailContentTypeHeader(t *testing.T) {
+	var capturedMsg string
+
+	mailer := &SMTPMailer{
+		Host: "mail",
+		Port: "1025",
+		From: "noreply@example.com",
+		sendMail: func(addr string, _ smtp.Auth, from string, to []string, msg []byte) error {
+			capturedMsg = string(msg)
+			return nil
+		},
+		tl: i18n.NewTranslator(),
+	}
+
+	err := mailer.SendUserRegistrationMail(context.Background(), UserRegistrationMail{
+		To:             "test@example.com",
+		URL:            "http://example.com/verify?token=abc",
+		Lang:           "ja",
+		ExpiresMinutes: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(capturedMsg, "Content-Type: text/plain; charset=UTF-8") {
+		t.Fatalf("content-type header not found in message: %s", capturedMsg)
+	}
+}
+
+func TestSMTPMailerSendUserRegistrationMailJapaneseSubject(t *testing.T) {
+	var capturedMsg string
+
+	tl := i18n.NewTranslator()
+	mailer := &SMTPMailer{
+		Host: "mail",
+		Port: "1025",
+		From: "noreply@example.com",
+		sendMail: func(addr string, _ smtp.Auth, from string, to []string, msg []byte) error {
+			capturedMsg = string(msg)
+			return nil
+		},
+		tl: tl,
+	}
+
+	err := mailer.SendUserRegistrationMail(context.Background(), UserRegistrationMail{
+		To:             "test@example.com",
+		URL:            "http://example.com/verify?token=abc",
+		Lang:           "ja",
+		ExpiresMinutes: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedSubject := tl.Translate("ja", i18n.CodeMailUserRegistrationSubject)
+	if !strings.Contains(capturedMsg, "Subject: "+expectedSubject) {
+		t.Fatalf("japanese subject not found in message: %s", capturedMsg)
+	}
+}
+
+func TestSMTPMailerSendUserAlreadyRegisteredMail(t *testing.T) {
+	var capturedMsg string
+
+	tl := i18n.NewTranslator()
+	mailer := &SMTPMailer{
+		Host: "mail",
+		Port: "1025",
+		From: "noreply@example.com",
+		sendMail: func(addr string, _ smtp.Auth, from string, to []string, msg []byte) error {
+			capturedMsg = string(msg)
+			return nil
+		},
+		tl: tl,
+	}
+
 	err := mailer.SendUserAlreadyRegisteredMail(context.Background(), "test@example.com", "ja")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !strings.Contains(capturedMsg, "既に登録されています") {
+	expectedBody := tl.Translate("ja", i18n.CodeMailUserAlreadyRegisteredBody)
+	if !strings.Contains(capturedMsg, expectedBody) {
 		t.Fatalf("unexpected message: %s", capturedMsg)
 	}
 }

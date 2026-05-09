@@ -240,9 +240,9 @@ if now.Before(resendAvailableAt) {
 
 | 対象 | 手法 |
 |---|---|
-| SMTP 送信パス全体 | `net.Pipe()` で偽 SMTP サーバを構築し、実ネットワークなしにテスト |
+| SMTP 送信パス全体 | `sendMail` 関数変数をテスト用クロージャに差し替えてモック |
 | TLS ダイヤル | パッケージ変数 `dialTLSFunc` を入れ替えてモック |
-| Redis レートリミット | Docker 上の実 Redis に接続して TTL リセット防止を検証 |
+| Redis レートリミット | `KeyedStore` インターフェースを満たすモックで検証 |
 | DB 操作 | `go-sqlmock` でクエリの引数・結果を検証 |
 | サービスロジック | インターフェースを満たすダミーで全依存を差し替え |
 

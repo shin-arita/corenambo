@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -58,6 +59,17 @@ func newRouter(h *UserRegistrationHandler) *gin.Engine {
 	return r
 }
 
+func newRouterWithSizeLimit(h *UserRegistrationHandler) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
+		c.Next()
+	})
+	r.POST("/test", h.Create)
+	return r
+}
+
 func newTestHandler(svc *mockService) *UserRegistrationHandler {
 	return NewUserRegistrationHandlerWithLimiter(svc, i18n.NewTranslator(), nil)
 }
@@ -85,7 +97,8 @@ func TestNewUserRegistrationHandler(t *testing.T) {
 func TestUserRegistrationHandlerCreateSuccess(t *testing.T) {
 	svc := &mockService{
 		out: &service.CreateUserRegistrationOutput{
-			Code: i18n.CodeUserRegistrationRequestCreated,
+			Code:           i18n.CodeUserRegistrationRequestCreated,
+			ExpiresMinutes: 60,
 		},
 	}
 
@@ -112,7 +125,8 @@ func TestUserRegistrationHandlerCreateSuccess(t *testing.T) {
 func TestUserRegistrationHandlerCreateDefaultLanguage(t *testing.T) {
 	svc := &mockService{
 		out: &service.CreateUserRegistrationOutput{
-			Code: i18n.CodeUserRegistrationRequestCreated,
+			Code:           i18n.CodeUserRegistrationRequestCreated,
+			ExpiresMinutes: 60,
 		},
 	}
 
@@ -220,7 +234,8 @@ func TestUserRegistrationHandlerCreateInternalError(t *testing.T) {
 func TestUserRegistrationHandlerCreateRateLimitIP(t *testing.T) {
 	svc := &mockService{
 		out: &service.CreateUserRegistrationOutput{
-			Code: i18n.CodeUserRegistrationRequestCreated,
+			Code:           i18n.CodeUserRegistrationRequestCreated,
+			ExpiresMinutes: 60,
 		},
 	}
 
@@ -257,7 +272,8 @@ func TestUserRegistrationHandlerCreateRateLimitIP(t *testing.T) {
 func TestUserRegistrationHandlerCreateRateLimitEmail(t *testing.T) {
 	svc := &mockService{
 		out: &service.CreateUserRegistrationOutput{
-			Code: i18n.CodeUserRegistrationRequestCreated,
+			Code:           i18n.CodeUserRegistrationRequestCreated,
+			ExpiresMinutes: 60,
 		},
 	}
 
@@ -312,7 +328,8 @@ func TestToResponse(t *testing.T) {
 func TestUserRegistrationHandlerCreateEnglishLanguage(t *testing.T) {
 	svc := &mockService{
 		out: &service.CreateUserRegistrationOutput{
-			Code: i18n.CodeUserRegistrationRequestCreated,
+			Code:           i18n.CodeUserRegistrationRequestCreated,
+			ExpiresMinutes: 60,
 		},
 	}
 
@@ -333,6 +350,88 @@ func TestUserRegistrationHandlerCreateEnglishLanguage(t *testing.T) {
 
 	if svc.input.Language != "en" {
 		t.Fatalf("unexpected language: %s", svc.input.Language)
+	}
+}
+
+func TestUserRegistrationHandlerCreateSuccessResponseBody(t *testing.T) {
+	svc := &mockService{
+		out: &service.CreateUserRegistrationOutput{
+			Code:           i18n.CodeUserRegistrationRequestCreated,
+			ExpiresMinutes: 60,
+		},
+	}
+
+	h := newTestHandler(svc)
+	r := newRouter(h)
+
+	body := `{"email":"test@example.com","email_confirmation":"test@example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatal(w.Code)
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+
+	if res["expires_minutes"] != float64(60) {
+		t.Fatalf("expected expires_minutes=60, got %v", res["expires_minutes"])
+	}
+
+	if res["code"] == "" {
+		t.Fatal("code is empty")
+	}
+
+	if res["message"] == "" {
+		t.Fatal("message is empty")
+	}
+}
+
+func TestUserRegistrationHandlerCreateBodyUnderSizeLimit(t *testing.T) {
+	svc := &mockService{
+		out: &service.CreateUserRegistrationOutput{
+			Code:           i18n.CodeUserRegistrationRequestCreated,
+			ExpiresMinutes: 60,
+		},
+	}
+
+	h := newTestHandler(svc)
+	r := newRouterWithSizeLimit(h)
+
+	body := `{"email":"test@example.com","email_confirmation":"test@example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", w.Code)
+	}
+}
+
+func TestUserRegistrationHandlerCreateBodyExceedsSizeLimit(t *testing.T) {
+	h := newTestHandler(&mockService{})
+	r := newRouterWithSizeLimit(h)
+
+	body := make([]byte, 1<<20+1)
+	for i := range body {
+		body[i] = 'a'
+	}
+	req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
 	}
 }
 

@@ -138,8 +138,15 @@ func (h *UserRegistrationHandler) Create(c *gin.Context) {
 
 	logger.Info("method=%s path=%s code=%s", c.Request.Method, c.FullPath(), output.Code)
 
-	c.JSON(http.StatusCreated, SuccessResponse{
-		Code:    output.Code,
-		Message: h.translator.Translate(lang, output.Code),
+	c.JSON(http.StatusCreated, createUserRegistrationResponse{
+		Code:           output.Code,
+		Message:        h.translator.Translate(lang, output.Code),
+		ExpiresMinutes: output.ExpiresMinutes,
 	})
+}
+
+type createUserRegistrationResponse struct {
+	Code           string `json:"code"`
+	Message        string `json:"message"`
+	ExpiresMinutes int    `json:"expires_minutes"`
 }

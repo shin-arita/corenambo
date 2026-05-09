@@ -34,10 +34,33 @@
 
 ## 正常時の表示
 
-以下のメッセージを常に表示する：
+API成功後、`/registration/complete` に遷移する。  
+フォーム自体にはメッセージを表示しない。
 
-- 仮登録メールを送信しました。メールをご確認ください。
-- A temporary registration email has been sent. Please check your email.
+---
+
+## 完了画面（/registration/complete）
+
+### 遷移条件
+
+- フォーム送信成功後に `/registration/complete` へ遷移する
+- 直接アクセスした場合は `/registration` へリダイレクトする
+
+### 受け取るstate
+
+`useNavigate` で渡される `location.state` に以下を含む：
+
+| フィールド          | 型                | 説明                                  |
+|---------------|------------------|-------------------------------------|
+| email         | string           | 送信対象メールアドレス                        |
+| expiresMinutes | integer \| null | 本登録URLの有効期限（分）。`null` の場合は非表示      |
+
+### 表示内容
+
+- 送信先メールアドレス（`state.email`）
+- 本登録URLの有効期限（`state.expiresMinutes` が非nullの場合のみ）
+- 迷惑メールフォルダの注意書き
+- 主要な指示文
 
 ---
 
@@ -45,7 +68,7 @@
 
 - メールアドレスの存在有無は表示しない
 - 登録済み・未登録を区別しない
-- 常に同一の成功メッセージを表示する
+- 常に同一の完了画面を表示する
 
 ---
 

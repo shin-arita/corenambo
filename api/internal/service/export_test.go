@@ -238,6 +238,85 @@ func (d *captureCreateRepo) FindByTokenHash(ctx context.Context, hash string) (*
 	return nil, nil
 }
 
+type dummyEmptyTokenGen struct{}
+
+func (d dummyEmptyTokenGen) Generate() (string, error) { return "", nil }
+
+type captureURLBuilder struct {
+	capturedToken string
+}
+
+func (d *captureURLBuilder) Build(token string) string {
+	d.capturedToken = token
+	return "http://localhost:5173/registration/verify?token=" + token
+}
+
+type captureOutboxRepo struct {
+	capturedPayload string
+}
+
+func (d *captureOutboxRepo) Create(ctx context.Context, m *model.MailOutbox) error {
+	d.capturedPayload = m.Payload
+	return nil
+}
+func (d *captureOutboxRepo) FetchPending(ctx context.Context, i int) ([]*model.MailOutbox, error) {
+	return nil, nil
+}
+func (d *captureOutboxRepo) MarkProcessing(ctx context.Context, id string) error        { return nil }
+func (d *captureOutboxRepo) MarkSent(ctx context.Context, id string, t time.Time) error { return nil }
+func (d *captureOutboxRepo) MarkFailed(ctx context.Context, id string, s string, t time.Time) error {
+	return nil
+}
+func (d *captureOutboxRepo) ResetStuckProcessing(ctx context.Context, stuckBefore time.Time) error {
+	return nil
+}
+
+type captureCreateUserRegistrationRepo struct {
+	capturedTokenHash string
+}
+
+func (d *captureCreateUserRegistrationRepo) FindByEmail(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *captureCreateUserRegistrationRepo) Create(ctx context.Context, req *model.UserRegistrationRequest) error {
+	d.capturedTokenHash = req.TokenHash
+	return nil
+}
+func (d *captureCreateUserRegistrationRepo) UpdateToken(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *captureCreateUserRegistrationRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+
+type captureFullOutboxRepo struct {
+	capturedOutbox *model.MailOutbox
+}
+
+func (d *captureFullOutboxRepo) Create(ctx context.Context, m *model.MailOutbox) error {
+	d.capturedOutbox = m
+	return nil
+}
+func (d *captureFullOutboxRepo) FetchPending(ctx context.Context, i int) ([]*model.MailOutbox, error) {
+	return nil, nil
+}
+func (d *captureFullOutboxRepo) MarkProcessing(ctx context.Context, id string) error { return nil }
+func (d *captureFullOutboxRepo) MarkSent(ctx context.Context, id string, t time.Time) error {
+	return nil
+}
+func (d *captureFullOutboxRepo) MarkFailed(ctx context.Context, id string, s string, t time.Time) error {
+	return nil
+}
+func (d *captureFullOutboxRepo) ResetStuckProcessing(ctx context.Context, stuckBefore time.Time) error {
+	return nil
+}
+
+type fixedClock struct {
+	t time.Time
+}
+
+func (c fixedClock) Now() time.Time { return c.t }
+
 type dummyURL struct{}
 
 func (d dummyURL) Build(s string) string { return "url" }
@@ -410,6 +489,76 @@ func newTestUserRegistrationServiceWithUpdateTokenError() UserRegistrationServic
 		dummyTokenHasher{},
 		dummyUUID{},
 		dummyClock{},
+		dummyURL{},
+		dummyConfig{},
+	)
+}
+
+func newTestUserRegistrationServiceWithEmptyTokenGen() UserRegistrationService {
+	return NewUserRegistrationService(
+		&dummyUserRepo{},
+		&dummyOutboxRepo{},
+		&dummyTx{},
+		dummyEmptyTokenGen{},
+		dummyTokenHasher{},
+		dummyUUID{},
+		dummyClock{},
+		dummyURL{},
+		dummyConfig{},
+	)
+}
+
+func newTestUserRegistrationServiceWithCaptureURLBuilder(builder *captureURLBuilder) UserRegistrationService {
+	return NewUserRegistrationService(
+		&dummyUserRepo{},
+		&dummyOutboxRepo{},
+		&dummyTx{},
+		dummyTokenGen{},
+		dummyTokenHasher{},
+		dummyUUID{},
+		dummyClock{},
+		builder,
+		dummyConfig{},
+	)
+}
+
+func newTestUserRegistrationServiceWithCaptureOutbox(outbox *captureOutboxRepo) UserRegistrationService {
+	return NewUserRegistrationService(
+		&dummyUserRepo{},
+		outbox,
+		&dummyTx{},
+		dummyTokenGen{},
+		dummyTokenHasher{},
+		dummyUUID{},
+		dummyClock{},
+		&captureURLBuilder{},
+		dummyConfig{},
+	)
+}
+
+func newTestUserRegistrationServiceWithCaptureUserRegistrationRepo(repo *captureCreateUserRegistrationRepo) UserRegistrationService {
+	return NewUserRegistrationService(
+		repo,
+		&dummyOutboxRepo{},
+		&dummyTx{},
+		dummyTokenGen{},
+		dummyTokenHasher{},
+		dummyUUID{},
+		dummyClock{},
+		dummyURL{},
+		dummyConfig{},
+	)
+}
+
+func newTestUserRegistrationServiceWithCaptureFullOutbox(outbox *captureFullOutboxRepo, clk fixedClock) UserRegistrationService {
+	return NewUserRegistrationService(
+		&dummyUserRepo{},
+		outbox,
+		&dummyTx{},
+		dummyTokenGen{},
+		dummyTokenHasher{},
+		dummyUUID{},
+		clk,
 		dummyURL{},
 		dummyConfig{},
 	)
