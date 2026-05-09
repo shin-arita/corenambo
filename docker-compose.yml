@@ -114,7 +114,7 @@ services:
     working_dir: /app
     volumes:
       - ./api:/app
-    command: ["./worker"]
+    command: sh -c "go mod download && go build -o ./worker ./cmd/worker && ./worker"
     depends_on:
       db:
         condition: service_healthy
