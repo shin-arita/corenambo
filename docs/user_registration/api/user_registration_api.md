@@ -28,6 +28,11 @@
 - Method: `POST`
 - Path: `/api/v1/user-registration-requests`
 
+### 3.2 ユーザ本登録
+
+- Method: `POST`
+- Path: `/api/v1/user-registrations/verify`
+
 ---
 
 ## 4. リクエスト仕様
@@ -40,10 +45,7 @@ Accept: application/json
 Accept-Language: ja
 ```
 
-- `Accept-Language` は以下のみ許可する
-  - `ja`
-  - `en`
-- 未指定または不正値の場合は `ja` をデフォルトとする
+- `Accept-Language` は `ja` / `en` に対応する。未指定または未対応言語の場合は `ja` にフォールバックする
 
 ---
 
@@ -324,12 +326,233 @@ Accept-Language: ja
 
 ---
 
-## 17. 今後の設計対象
+---
 
-- 本登録API設計
+## 17. 本登録API仕様（POST /api/v1/user-registrations/verify）
+
+### 17.1 概要
+
+仮登録メールに含まれたトークンを受け取り、ユーザ本登録を完了させるAPI。  
+1回のリクエストで以下のテーブルへの書き込みをトランザクションで実行する。
+
+- `users` — ユーザ本体の作成
+- `user_emails` — メールアドレスの登録（主メール・検証済み）
+- `user_credentials` — パスワードハッシュの登録
+- `user_registration_requests.verified_at` — 本登録完了日時の更新
 
 ---
 
-## 18. 検討メモ
+### 17.2 Headers
 
-- verified_at の扱いは本登録APIと整合を取る
+```http
+Content-Type: application/json
+Accept: application/json
+Accept-Language: ja
+```
+
+- `Accept-Language` は `ja` / `en` に対応する。未指定または未対応言語の場合は `ja` にフォールバックする
+
+---
+
+### 17.3 Request Body
+
+```json
+{
+  "token": "BvduupOZ9i1KuMzmH8Yx7chKgpJCjCFXy2SiVBvE2LU",
+  "display_name": "テストユーザー",
+  "password": "Password123!",
+  "password_confirmation": "Password123!",
+  "agreed_to_terms": true
+}
+```
+
+#### パラメータ定義
+
+| 項目                  | 型      | 必須 | 最大長 | 説明                     |
+|---------------------|--------|---:|------|------------------------|
+| token               | string |  ○ | 500  | 仮登録メールに記載されたトークン（平文）    |
+| display_name        | string |  ○ | 100  | 画面表示用ユーザ名               |
+| password            | string |  ○ | 255  | 設定するパスワード               |
+| password_confirmation | string |  ○ | 255  | パスワード確認用                |
+| agreed_to_terms     | bool   |  ○ | —    | 利用規約への同意（`true` のみ受け付け） |
+
+---
+
+### 17.4 リクエスト制限
+
+- 最大サイズ：1MB（全エンドポイント共通ミドルウェア）
+- レートリミット：IPアドレス単位 5回/分（Redis）
+
+---
+
+### 17.5 正常レスポンス
+
+- Status Code: `201 Created`
+
+```json
+{
+  "code": "USER_REGISTRATION_VERIFIED",
+  "message": "本登録が完了しました。"
+}
+```
+
+#### レスポンスフィールド
+
+| フィールド   | 型      | 説明             |
+|---------|--------|----------------|
+| code    | string | レスポンスコード       |
+| message | string | メッセージ（i18n）   |
+
+---
+
+### 17.6 エラーレスポンス
+
+#### 400 Bad Request — トークン不正
+
+```json
+{
+  "code": "INVALID_REGISTRATION_TOKEN",
+  "message": "トークンが不正です。"
+}
+```
+
+- トークンが空の場合
+- SHA-256ハッシュが `user_registration_requests` に存在しない場合
+
+#### 400 Bad Request — トークン期限切れ
+
+```json
+{
+  "code": "EXPIRED_REGISTRATION_TOKEN",
+  "message": "トークンの有効期限が切れています。"
+}
+```
+
+- `expires_at < 現在時刻` の場合
+
+#### 409 Conflict — トークン使用済み
+
+```json
+{
+  "code": "USED_REGISTRATION_TOKEN",
+  "message": "既に登録が完了しています。"
+}
+```
+
+- `verified_at IS NOT NULL` の場合
+
+#### 409 Conflict — メール重複
+
+```json
+{
+  "code": "USER_ALREADY_REGISTERED",
+  "message": "入力されたメールアドレスは既に登録されています。"
+}
+```
+
+- `user_emails` に同じメールアドレス（大文字小文字を問わない）が存在する場合
+
+#### 422 Unprocessable Entity — バリデーションエラー
+
+```json
+{
+  "code": "VALIDATION_ERROR",
+  "message": "入力内容に誤りがあります。",
+  "errors": {
+    "display_name": ["ユーザ名を入力してください。"],
+    "password": ["パスワードを入力してください。"],
+    "password_confirmation": ["パスワードが一致しません。"],
+    "agreed_to_terms": ["利用規約への同意が必要です。"]
+  }
+}
+```
+
+#### 429 Too Many Requests
+
+```json
+{
+  "code": "TOO_MANY_REQUESTS",
+  "message": "リクエストが多すぎます。しばらく待ってから再度お試しください。"
+}
+```
+
+#### 500 Internal Server Error
+
+```json
+{
+  "code": "INTERNAL_SERVER_ERROR",
+  "message": "システムエラーが発生しました。"
+}
+```
+
+---
+
+### 17.7 バリデーション仕様
+
+| フィールド                | ルール                                          |
+|----------------------|----------------------------------------------|
+| token                | 空文字の場合は 400 を返す（バリデーションエラーとは区別）              |
+| display_name         | 必須。空白のみは不可（TrimSpace後に空文字チェック）               |
+| password             | 必須                                           |
+| password_confirmation | 必須。`password` と一致すること                        |
+| agreed_to_terms      | `true` であること                                 |
+
+---
+
+### 17.8 エラーコード一覧（本登録API）
+
+| コード                          | HTTP  | 説明                        |
+|------------------------------|-------|---------------------------|
+| USER_REGISTRATION_VERIFIED   | 201   | 本登録完了                     |
+| INVALID_REGISTRATION_TOKEN   | 400   | トークン不正または存在しない            |
+| EXPIRED_REGISTRATION_TOKEN   | 400   | トークン有効期限切れ                |
+| USED_REGISTRATION_TOKEN      | 409   | トークン使用済み（verified_at設定済み） |
+| USER_ALREADY_REGISTERED      | 409   | メールアドレス重複                 |
+| VALIDATION_ERROR             | 422   | 入力値エラー                    |
+| DISPLAY_NAME_REQUIRED        | 422   | display_name 必須            |
+| PASSWORD_REQUIRED            | 422   | password 必須               |
+| PASSWORD_CONFIRMATION_REQUIRED | 422 | password_confirmation 必須  |
+| PASSWORD_CONFIRMATION_NOT_MATCH | 422 | パスワード不一致                 |
+| AGREED_TO_TERMS_REQUIRED     | 422   | 利用規約同意が必要                 |
+| TOO_MANY_REQUESTS            | 429   | レートリミット超過                 |
+| INTERNAL_SERVER_ERROR        | 500   | サーバ内部エラー                  |
+
+---
+
+### 17.9 i18n 対応
+
+全エラーコードについて `ja` / `en` 両言語のメッセージを定義済み。  
+`Accept-Language` ヘッダで言語を切り替え、未対応言語は `ja` にフォールバックする。
+
+---
+
+### 17.10 処理フロー
+
+1. リクエスト受信（ボディサイズ制限 1MB）
+2. JSONバインド
+3. IPレートリミットチェック
+4. バリデーション（display_name / password / password_confirmation / agreed_to_terms）
+5. token の SHA-256 ハッシュ化
+6. password の bcrypt ハッシュ化
+7. トランザクション開始
+   1. `user_registration_requests` を `FOR UPDATE` で取得（排他ロック）
+   2. レコード存在チェック（不正トークン）
+   3. `verified_at` チェック（使用済み）
+   4. `expires_at` チェック（期限切れ）
+   5. `user_emails` 重複チェック
+   6. `users` INSERT
+   7. `user_emails` INSERT（is_primary=true, verified_at=now）
+   8. `user_credentials` INSERT（password_hash=bcrypt）
+   9. `user_registration_requests.verified_at` UPDATE
+8. 201 返却
+
+---
+
+### 17.11 DB反映内容
+
+| テーブル | 操作 | 主要カラム |
+|------|------|---------|
+| users | INSERT | id, display_name, status='active' |
+| user_emails | INSERT | id, user_id, email, is_primary=true, verified_at=now |
+| user_credentials | INSERT | user_id, password_hash, password_changed_at |
+| user_registration_requests | UPDATE | verified_at=now |

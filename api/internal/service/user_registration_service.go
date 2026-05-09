@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"app-api/internal/app_error"
 	"app-api/internal/clock"
 	"app-api/internal/config"
@@ -20,6 +22,16 @@ import (
 )
 
 var jsonMarshal = json.Marshal
+
+var bcryptGenerate = bcrypt.GenerateFromPassword
+
+var hashPassword = func(password string) (string, error) {
+	b, err := bcryptGenerate([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
 
 type UserRegistrationService interface {
 	Create(ctx context.Context, input CreateUserRegistrationInput) (*CreateUserRegistrationOutput, error)
@@ -38,7 +50,11 @@ type CreateUserRegistrationOutput struct {
 }
 
 type VerifyUserRegistrationInput struct {
-	Token string
+	Token                string
+	DisplayName          string
+	Password             string
+	PasswordConfirmation string
+	AgreedToTerms        bool
 }
 
 type VerifyUserRegistrationOutput struct {
@@ -47,6 +63,9 @@ type VerifyUserRegistrationOutput struct {
 
 type userRegistrationService struct {
 	userRegistrationRequestRepo repository.UserRegistrationRequestRepository
+	userRepo                    repository.UserRepository
+	userEmailRepo               repository.UserEmailRepository
+	userCredentialRepo          repository.UserCredentialRepository
 	mailOutboxRepo              repository.MailOutboxRepository
 	txManager                   repository.TxManager
 	tokenGenerator              token.Generator
@@ -59,6 +78,9 @@ type userRegistrationService struct {
 
 func NewUserRegistrationService(
 	userRegistrationRequestRepo repository.UserRegistrationRequestRepository,
+	userRepo repository.UserRepository,
+	userEmailRepo repository.UserEmailRepository,
+	userCredentialRepo repository.UserCredentialRepository,
 	mailOutboxRepo repository.MailOutboxRepository,
 	txManager repository.TxManager,
 	tokenGenerator token.Generator,
@@ -70,6 +92,9 @@ func NewUserRegistrationService(
 ) UserRegistrationService {
 	return &userRegistrationService{
 		userRegistrationRequestRepo: userRegistrationRequestRepo,
+		userRepo:                    userRepo,
+		userEmailRepo:               userEmailRepo,
+		userCredentialRepo:          userCredentialRepo,
 		mailOutboxRepo:              mailOutboxRepo,
 		txManager:                   txManager,
 		tokenGenerator:              tokenGenerator,
@@ -104,6 +129,45 @@ func validateCreateInput(input CreateUserRegistrationInput) error {
 	} else if email != "" && email != emailConfirmation {
 		fieldErrors["email_confirmation"] = append(fieldErrors["email_confirmation"], app_error.FieldError{
 			Code: i18n.CodeEmailConfirmationNotMatch,
+		})
+	}
+
+	if len(fieldErrors) > 0 {
+		return app_error.NewValidation(fieldErrors)
+	}
+
+	return nil
+}
+
+func validateVerifyInput(input VerifyUserRegistrationInput) error {
+	fieldErrors := map[string][]app_error.FieldError{}
+
+	displayName := strings.TrimSpace(input.DisplayName)
+	if displayName == "" {
+		fieldErrors["display_name"] = append(fieldErrors["display_name"], app_error.FieldError{
+			Code: i18n.CodeDisplayNameRequired,
+		})
+	}
+
+	if input.Password == "" {
+		fieldErrors["password"] = append(fieldErrors["password"], app_error.FieldError{
+			Code: i18n.CodePasswordRequired,
+		})
+	}
+
+	if input.PasswordConfirmation == "" {
+		fieldErrors["password_confirmation"] = append(fieldErrors["password_confirmation"], app_error.FieldError{
+			Code: i18n.CodePasswordConfirmationRequired,
+		})
+	} else if input.Password != "" && input.Password != input.PasswordConfirmation {
+		fieldErrors["password_confirmation"] = append(fieldErrors["password_confirmation"], app_error.FieldError{
+			Code: i18n.CodePasswordConfirmationNotMatch,
+		})
+	}
+
+	if !input.AgreedToTerms {
+		fieldErrors["agreed_to_terms"] = append(fieldErrors["agreed_to_terms"], app_error.FieldError{
+			Code: i18n.CodeAgreedToTermsRequired,
 		})
 	}
 
@@ -244,5 +308,104 @@ func (s *userRegistrationService) Verify(
 	input VerifyUserRegistrationInput,
 ) (*VerifyUserRegistrationOutput, error) {
 
-	return nil, app_error.NewInternal(errors.New("Verify: not implemented"))
+	if input.Token == "" {
+		return nil, app_error.NewBadRequest(i18n.CodeInvalidRegistrationToken)
+	}
+
+	if err := validateVerifyInput(input); err != nil {
+		return nil, err
+	}
+
+	input.DisplayName = strings.TrimSpace(input.DisplayName)
+
+	tokenHash, err := s.tokenHasher.Hash(input.Token)
+	if err != nil {
+		return nil, app_error.WrapInternal(err)
+	}
+
+	passwordHash, err := hashPassword(input.Password)
+	if err != nil {
+		return nil, app_error.WrapInternal(err)
+	}
+
+	now := s.clock.Now()
+
+	err = s.txManager.WithinTransaction(ctx, func(txCtx context.Context) error {
+		req, err := s.userRegistrationRequestRepo.FindByTokenHashForUpdate(txCtx, tokenHash)
+		if err != nil {
+			return err
+		}
+
+		if req == nil {
+			return app_error.NewBadRequest(i18n.CodeInvalidRegistrationToken)
+		}
+
+		if req.VerifiedAt != nil {
+			return app_error.NewConflict(i18n.CodeUsedRegistrationToken)
+		}
+
+		if now.After(req.ExpiresAt) {
+			return app_error.NewBadRequest(i18n.CodeExpiredRegistrationToken)
+		}
+
+		existing, err := s.userEmailRepo.FindByEmail(txCtx, req.Email)
+		if err != nil {
+			return err
+		}
+		if existing != nil {
+			return app_error.NewConflict(i18n.CodeUserAlreadyRegistered)
+		}
+
+		userID, err := s.uuidGenerator.NewV7()
+		if err != nil {
+			return err
+		}
+
+		if err := s.userRepo.Create(txCtx, &model.User{
+			ID:          userID,
+			DisplayName: input.DisplayName,
+			Status:      "active",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}); err != nil {
+			return err
+		}
+
+		emailID, err := s.uuidGenerator.NewV7()
+		if err != nil {
+			return err
+		}
+
+		if err := s.userEmailRepo.Create(txCtx, &model.UserEmail{
+			ID:         emailID,
+			UserID:     userID,
+			Email:      req.Email,
+			IsPrimary:  true,
+			VerifiedAt: &now,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}); err != nil {
+			return err
+		}
+
+		if err := s.userCredentialRepo.Create(txCtx, &model.UserCredential{
+			UserID:            userID,
+			PasswordHash:      passwordHash,
+			PasswordChangedAt: now,
+			CreatedAt:         now,
+		}); err != nil {
+			return err
+		}
+
+		req.VerifiedAt = &now
+		return s.userRegistrationRequestRepo.UpdateVerifiedAt(txCtx, req)
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &VerifyUserRegistrationOutput{
+		Code: i18n.CodeUserRegistrationVerified,
+	}, nil
 }

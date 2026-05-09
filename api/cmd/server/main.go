@@ -66,6 +66,7 @@ func main() {
 	}))
 
 	router.POST("/api/v1/user-registration-requests", userRegistrationHandler.Create)
+	router.POST("/api/v1/user-registrations/verify", userRegistrationHandler.Verify)
 
 	logger.Info("msg=server started port=%s", serverCfg.GetPort())
 	if err := router.Run(":" + serverCfg.GetPort()); err != nil {

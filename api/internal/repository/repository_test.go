@@ -493,3 +493,145 @@ func TestUserRegistrationRequestRepositoryFindByTokenHashError(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestUserRegistrationRequestRepositoryFindByTokenHashForUpdate(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	mock.ExpectQuery("SELECT").
+		WithArgs("token-hash").
+		WillReturnRows(userRegistrationRequestRows(now))
+
+	repo := NewUserRegistrationRequestRepository(db)
+
+	entity, err := repo.FindByTokenHashForUpdate(context.Background(), "token-hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if entity == nil {
+		t.Fatal("entity is nil")
+	}
+
+	if entity.TokenHash != "token-hash" {
+		t.Fatalf("unexpected token hash: %s", entity.TokenHash)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUserRegistrationRequestRepositoryFindByTokenHashForUpdateNoRows(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectQuery("SELECT").
+		WithArgs("none").
+		WillReturnError(sql.ErrNoRows)
+
+	repo := NewUserRegistrationRequestRepository(db)
+
+	entity, err := repo.FindByTokenHashForUpdate(context.Background(), "none")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if entity != nil {
+		t.Fatal("entity should be nil")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUserRegistrationRequestRepositoryFindByTokenHashForUpdateError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	expectedErr := errors.New("select failed")
+
+	mock.ExpectQuery("SELECT").
+		WithArgs("token-hash").
+		WillReturnError(expectedErr)
+
+	repo := NewUserRegistrationRequestRepository(db)
+
+	_, err = repo.FindByTokenHashForUpdate(context.Background(), "token-hash")
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUserRegistrationRequestRepositoryUpdateVerifiedAt(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	mock.ExpectExec("UPDATE user_registration_requests").
+		WithArgs("id", now).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	repo := NewUserRegistrationRequestRepository(db)
+
+	err = repo.UpdateVerifiedAt(context.Background(), &model.UserRegistrationRequest{
+		ID:         "id",
+		VerifiedAt: &now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUserRegistrationRequestRepositoryUpdateVerifiedAtError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	expectedErr := errors.New("update failed")
+
+	mock.ExpectExec("UPDATE user_registration_requests").
+		WithArgs("id", now).
+		WillReturnError(expectedErr)
+
+	repo := NewUserRegistrationRequestRepository(db)
+
+	err = repo.UpdateVerifiedAt(context.Background(), &model.UserRegistrationRequest{
+		ID:         "id",
+		VerifiedAt: &now,
+	})
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

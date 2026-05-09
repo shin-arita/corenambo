@@ -236,6 +236,106 @@ if now.Before(resendAvailableAt) {
 
 ---
 
+---
+
+## 本登録API（Verify）セキュリティ設計
+
+### 12. パスワードの bcrypt ハッシュ化
+
+```go
+// service/user_registration_service.go
+var bcryptGenerate = bcrypt.GenerateFromPassword
+
+var hashPassword = func(password string) (string, error) {
+    b, err := bcryptGenerate([]byte(password), bcrypt.DefaultCost)
+    if err != nil {
+        return "", err
+    }
+    return string(b), nil
+}
+```
+
+- `bcrypt.DefaultCost`（コスト係数 10）でハッシュ化
+- `user_credentials.password_hash` に保存。平文パスワードは一切保存しない
+- bcrypt はレインボーテーブル攻撃に耐性がある（ソルトが内部に含まれる）
+- `bcryptGenerate` をパッケージ変数に分離することでテスト時にモック可能にしている
+
+### 13. パスワード・トークンのログ出力禁止
+
+```go
+// handler/user_registration_handler.go（Verify）
+logger.Error("method=%s path=%s code=%s cause=%v",
+    c.Request.Method, c.FullPath(), appErr.Code, appErr.Cause)
+logger.Warn("method=%s path=%s code=%s",
+    c.Request.Method, c.FullPath(), appErr.Code)
+logger.Info("method=%s path=%s code=%s",
+    c.Request.Method, c.FullPath(), output.Code)
+```
+
+- ログに含まれるのは `method` / `path` / `code` / `cause`（内部エラーのみ）のみ
+- `token`（平文）/ `password` / `password_hash` はログに出力しない
+- `cause` はサーバ内部エラー（5xx）時のみ出力する
+
+### 14. エラーレスポンスによる情報漏洩防止
+
+本登録APIのエラーレスポンスはコードとメッセージのみを返す。以下の情報は漏洩しない。
+
+| 漏洩させない情報 | 対処 |
+|-----------|------|
+| トークンが DB に存在するかどうか | 存在しない / ハッシュ不一致の両方に同じコード `INVALID_REGISTRATION_TOKEN` を返す |
+| パスワードの内容 | エラーコードは `PASSWORD_REQUIRED` / `PASSWORD_CONFIRMATION_NOT_MATCH` のみ |
+| bcrypt 処理の失敗 | `WrapInternal(err)` で 500 に変換し、原因は外部に出さない |
+
+### 15. 本登録APIのレートリミット
+
+```go
+// handler/user_registration_handler.go（Verify）
+if h.rateLimiter != nil {
+    if !h.rateLimiter.AllowIP(c.Request.Context(), c.ClientIP(),
+        h.rateLimitConfig.RateLimitIPPerMinute()) {
+        c.JSON(http.StatusTooManyRequests, ...)
+        return
+    }
+}
+```
+
+- IPアドレス単位で 5回/分（環境変数 `RATE_LIMIT_IP_PER_MINUTE`）
+- 仮登録API（Create）と同じ Redis キー `rate_limit:ip:{ip}` を共有する
+- 本登録APIはメールアドレスではなく、仮登録メールに含まれる32バイト暗号乱数トークンを前提とする。そのためメール単位のレートリミットではなく、IP単位のレートリミットで総当たり試行を抑制する
+
+### 16. mail_outboxes.payload を送信後に空にする設計意図
+
+```go
+// repository/mail_outbox_repository.go（MarkSent）
+SET payload = '{}'
+```
+
+worker がメール送信に成功した後、`payload` フィールドを `'{}'` で上書きする。
+
+- `payload` には本登録 URL（トークン平文を含む）が格納されている
+- 送信後も平文 URL が DB に残ると、DB 漏洩時に未使用トークンが流出するリスクがある
+- 送信完了後は不要なため即座に削除する
+
+### 17. E2EテストでMailpitからトークンを取得する理由
+
+```bash
+# scripts/e2e_user_registration.sh
+get_token_from_mailpit() {
+  ...
+  curl -s "${MAILPIT_URL}/api/v1/message/${msg_id}" | \
+    grep -o '"Text":"[^"]*"' | grep -o 'token=[^\\]*' | ...
+}
+```
+
+`mail_outboxes.payload` ではなく Mailpit API を使用する理由：
+
+- worker は仮登録 API 呼び出しから約 1 秒以内にメール送信を完了する
+- 送信後、`mail_outboxes.payload` は `'{}'` に上書きされる（設計 §16 参照）
+- そのため E2E テスト実行時点では `payload` からトークンを取得できない
+- Mailpit の REST API（`GET /api/v1/messages`, `GET /api/v1/message/{id}`）を通じて送信済みメールのテキスト本文を取得し、URL中のトークンを抽出する
+
+---
+
 ## テスト方針
 
 | 対象 | 手法 |
@@ -245,5 +345,6 @@ if now.Before(resendAvailableAt) {
 | Redis レートリミット | `KeyedStore` インターフェースを満たすモックで検証 |
 | DB 操作 | `go-sqlmock` でクエリの引数・結果を検証 |
 | サービスロジック | インターフェースを満たすダミーで全依存を差し替え |
+| bcrypt エラー | `bcryptGenerate` パッケージ変数をモックしてエラーパスを検証 |
 
 全パッケージでカバレッジ 100% を維持。

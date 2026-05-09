@@ -30,3 +30,7 @@ func NewUserRegistrationHandler(
 func (h *UserRegistrationHandler) Create(c *gin.Context) {
 	h.inner.Create(c)
 }
+
+func (h *UserRegistrationHandler) Verify(c *gin.Context) {
+	h.inner.Verify(c)
+}

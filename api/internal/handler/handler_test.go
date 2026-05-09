@@ -17,9 +17,11 @@ import (
 )
 
 type mockService struct {
-	out   *service.CreateUserRegistrationOutput
-	err   error
-	input service.CreateUserRegistrationInput
+	out       *service.CreateUserRegistrationOutput
+	err       error
+	input     service.CreateUserRegistrationInput
+	verifyOut *service.VerifyUserRegistrationOutput
+	verifyErr error
 }
 
 func (m *mockService) Create(ctx context.Context, in service.CreateUserRegistrationInput) (*service.CreateUserRegistrationOutput, error) {
@@ -28,8 +30,11 @@ func (m *mockService) Create(ctx context.Context, in service.CreateUserRegistrat
 }
 
 func (m *mockService) Verify(ctx context.Context, in service.VerifyUserRegistrationInput) (*service.VerifyUserRegistrationOutput, error) {
+	if m.verifyOut != nil || m.verifyErr != nil {
+		return m.verifyOut, m.verifyErr
+	}
 	return &service.VerifyUserRegistrationOutput{
-		Code: i18n.CodeUserRegistrationTokenVerified,
+		Code: i18n.CodeUserRegistrationVerified,
 	}, nil
 }
 
@@ -56,6 +61,24 @@ func newRouter(h *UserRegistrationHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.POST("/test", h.Create)
+	return r
+}
+
+func newVerifyRouter(h *UserRegistrationHandler) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/verify", h.Verify)
+	return r
+}
+
+func newVerifyRouterWithSizeLimit(h *UserRegistrationHandler) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
+		c.Next()
+	})
+	r.POST("/verify", h.Verify)
 	return r
 }
 
@@ -432,6 +455,234 @@ func TestUserRegistrationHandlerCreateBodyExceedsSizeLimit(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+const validVerifyBody = `{"token":"valid-token","display_name":"testuser","password":"password123","password_confirmation":"password123","agreed_to_terms":true}`
+
+func TestUserRegistrationHandlerVerifySuccess(t *testing.T) {
+	svc := &mockService{
+		verifyOut: &service.VerifyUserRegistrationOutput{
+			Code: i18n.CodeUserRegistrationVerified,
+		},
+	}
+
+	h := newTestHandler(svc)
+	r := newVerifyRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body: %s", w.Code, w.Body.String())
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+
+	if res["code"] == "" {
+		t.Fatal("code is empty")
+	}
+
+	if res["message"] == "" {
+		t.Fatal("message is empty")
+	}
+}
+
+func TestUserRegistrationHandlerVerifyBadRequest(t *testing.T) {
+	h := newTestHandler(&mockService{})
+	r := newVerifyRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString("{invalid"))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestUserRegistrationHandlerVerifyTokenInvalid(t *testing.T) {
+	h := newTestHandler(&mockService{
+		verifyErr: app_error.NewBadRequest(i18n.CodeInvalidRegistrationToken),
+	})
+	r := newVerifyRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestUserRegistrationHandlerVerifyTokenExpired(t *testing.T) {
+	h := newTestHandler(&mockService{
+		verifyErr: app_error.NewBadRequest(i18n.CodeExpiredRegistrationToken),
+	})
+	r := newVerifyRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestUserRegistrationHandlerVerifyAlreadyVerified(t *testing.T) {
+	h := newTestHandler(&mockService{
+		verifyErr: app_error.NewConflict(i18n.CodeUsedRegistrationToken),
+	})
+	r := newVerifyRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", w.Code)
+	}
+}
+
+func TestUserRegistrationHandlerVerifyUserAlreadyRegistered(t *testing.T) {
+	h := newTestHandler(&mockService{
+		verifyErr: app_error.NewConflict(i18n.CodeUserAlreadyRegistered),
+	})
+	r := newVerifyRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", w.Code)
+	}
+}
+
+func TestUserRegistrationHandlerVerifyValidationError(t *testing.T) {
+	h := newTestHandler(&mockService{
+		verifyErr: app_error.NewValidation(map[string][]app_error.FieldError{
+			"display_name": {{Code: i18n.CodeDisplayNameRequired}},
+		}),
+	})
+	r := newVerifyRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", w.Code)
+	}
+}
+
+func TestUserRegistrationHandlerVerifyInternalError(t *testing.T) {
+	h := newTestHandler(&mockService{
+		verifyErr: app_error.NewInternal(nil),
+	})
+	r := newVerifyRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestUserRegistrationHandlerVerifyRateLimitIP(t *testing.T) {
+	svc := &mockService{
+		verifyOut: &service.VerifyUserRegistrationOutput{
+			Code: i18n.CodeUserRegistrationVerified,
+		},
+	}
+
+	h := NewUserRegistrationHandlerWithLimiter(
+		svc,
+		i18n.NewTranslator(),
+		newRateLimiter(&keyedRateLimitStore{}),
+	)
+	r := newVerifyRouter(h)
+
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("request %d: expected 201, got %d", i+1, w.Code)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d", w.Code)
+	}
+}
+
+func TestUserRegistrationHandlerVerifyBodyExceedsSizeLimit(t *testing.T) {
+	h := newTestHandler(&mockService{})
+	r := newVerifyRouterWithSizeLimit(h)
+
+	body := make([]byte, 1<<20+1)
+	for i := range body {
+		body[i] = 'a'
+	}
+	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestUserRegistrationHandlerVerifyDefaultLanguage(t *testing.T) {
+	svc := &mockService{
+		verifyOut: &service.VerifyUserRegistrationOutput{
+			Code: i18n.CodeUserRegistrationVerified,
+		},
+	}
+
+	h := newTestHandler(svc)
+	r := newVerifyRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", w.Code)
 	}
 }
 

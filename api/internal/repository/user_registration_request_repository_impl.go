@@ -134,3 +134,50 @@ WHERE id = $1
 	)
 	return err
 }
+
+func (r *userRegistrationRequestRepository) FindByTokenHashForUpdate(ctx context.Context, tokenHash string) (*model.UserRegistrationRequest, error) {
+	const query = `
+SELECT
+        id,
+        email,
+        token_hash,
+        expires_at,
+        verified_at,
+        last_sent_at,
+        created_at
+FROM user_registration_requests
+WHERE token_hash = $1
+LIMIT 1
+FOR UPDATE
+`
+
+	entity := &model.UserRegistrationRequest{}
+	err := getExecutor(ctx, r.db).QueryRowContext(ctx, query, tokenHash).Scan(
+		&entity.ID,
+		&entity.Email,
+		&entity.TokenHash,
+		&entity.ExpiresAt,
+		&entity.VerifiedAt,
+		&entity.LastSentAt,
+		&entity.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return entity, nil
+}
+
+func (r *userRegistrationRequestRepository) UpdateVerifiedAt(ctx context.Context, entity *model.UserRegistrationRequest) error {
+	const query = `
+UPDATE user_registration_requests
+SET verified_at = $2
+WHERE id = $1
+`
+
+	_, err := getExecutor(ctx, r.db).ExecContext(ctx, query, entity.ID, entity.VerifiedAt)
+	return err
+}

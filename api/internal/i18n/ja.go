@@ -2,6 +2,7 @@ package i18n
 
 var jaMessages = map[string]string{
 	CodeUserRegistrationRequestCreated: "仮登録メールを送信しました。メールをご確認ください。",
+	CodeUserRegistrationVerified:       "本登録が完了しました。",
 
 	CodeBadRequest:          "リクエストが不正です。",
 	CodeValidationError:     "入力内容に誤りがあります。",
@@ -9,14 +10,20 @@ var jaMessages = map[string]string{
 
 	CodeUserAlreadyRegistered: "入力されたメールアドレスは既に登録されています。",
 
+	CodeInvalidRegistrationToken: "トークンが不正です。",
+	CodeExpiredRegistrationToken: "トークンの有効期限が切れています。",
+	CodeUsedRegistrationToken:    "既に登録が完了しています。",
+
 	CodeEmailRequired:             "メールアドレスを入力してください。",
 	CodeEmailFormatInvalid:        "正しいメールアドレス形式で入力してください。",
 	CodeEmailConfirmationRequired: "メールアドレスを入力してください。",
 	CodeEmailConfirmationNotMatch: "メールアドレスが一致しません。",
 
-	CodeTokenInvalid:                    "トークンが不正です。",
-	CodeTokenExpired:                    "トークンの有効期限が切れています。",
-	CodeUserRegistrationAlreadyVerified: "既に登録が完了しています。",
+	CodeDisplayNameRequired:          "ユーザ名を入力してください。",
+	CodePasswordRequired:             "パスワードを入力してください。",
+	CodePasswordConfirmationRequired: "確認用パスワードを入力してください。",
+	CodePasswordConfirmationNotMatch: "パスワードが一致しません。",
+	CodeAgreedToTermsRequired:        "利用規約への同意が必要です。",
 
 	CodeMailUserRegistrationSubject: "ユーザ仮登録のご案内",
 

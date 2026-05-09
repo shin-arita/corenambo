@@ -15,11 +15,17 @@ func NewUserRegistrationService(
 	cfg config.RegistrationConfig,
 ) service.UserRegistrationService {
 
-	userRepo := repository.NewUserRegistrationRequestRepository(db.SQLDb())
+	regRepo := repository.NewUserRegistrationRequestRepository(db.SQLDb())
+	userRepo := repository.NewUserRepository(db.SQLDb())
+	userEmailRepo := repository.NewUserEmailRepository(db.SQLDb())
+	userCredentialRepo := repository.NewUserCredentialRepository(db.SQLDb())
 	outboxRepo := repository.NewMailOutboxRepository(db.SQLDb())
 
 	return service.NewUserRegistrationService(
+		regRepo,
 		userRepo,
+		userEmailRepo,
+		userCredentialRepo,
 		outboxRepo,
 		db,
 		token.DefaultGenerator{},

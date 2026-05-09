@@ -38,3 +38,4 @@ vendor
 
 # Claude Code local settings
 .claude/
+tmp_schema.sql

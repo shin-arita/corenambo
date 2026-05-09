@@ -150,3 +150,78 @@ type createUserRegistrationResponse struct {
 	Message        string `json:"message"`
 	ExpiresMinutes int    `json:"expires_minutes"`
 }
+
+type VerifyUserRegistrationRequest struct {
+	Token                string `json:"token" binding:"max=500"`
+	DisplayName          string `json:"display_name" binding:"max=100"`
+	Password             string `json:"password" binding:"max=255"`
+	PasswordConfirmation string `json:"password_confirmation" binding:"max=255"`
+	AgreedToTerms        bool   `json:"agreed_to_terms"`
+}
+
+func (h *UserRegistrationHandler) Verify(c *gin.Context) {
+	lang := normalizeLanguage(c.GetHeader("Accept-Language"))
+
+	var req VerifyUserRegistrationRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		appErr := app_error.NewBadRequest(i18n.CodeBadRequest)
+		c.JSON(appErr.StatusCode(), ToResponse(appErr, lang, h.translator))
+		return
+	}
+
+	if h.rateLimiter != nil {
+		if !h.rateLimiter.AllowIP(
+			c.Request.Context(),
+			c.ClientIP(),
+			h.rateLimitConfig.RateLimitIPPerMinute(),
+		) {
+			c.JSON(http.StatusTooManyRequests, ErrorResponse{
+				Code:    codeTooManyRequests,
+				Message: "リクエストが多すぎます。しばらく待ってから再度お試しください。",
+			})
+			return
+		}
+	}
+
+	output, err := h.service.Verify(
+		c.Request.Context(),
+		service.VerifyUserRegistrationInput{
+			Token:                req.Token,
+			DisplayName:          req.DisplayName,
+			Password:             req.Password,
+			PasswordConfirmation: req.PasswordConfirmation,
+			AgreedToTerms:        req.AgreedToTerms,
+		},
+	)
+	if err != nil {
+		appErr := app_error.Normalize(err)
+
+		if appErr.StatusCode() >= 500 {
+			logger.Error(
+				"method=%s path=%s code=%s cause=%v",
+				c.Request.Method,
+				c.FullPath(),
+				appErr.Code,
+				appErr.Cause,
+			)
+		} else {
+			logger.Warn(
+				"method=%s path=%s code=%s",
+				c.Request.Method,
+				c.FullPath(),
+				appErr.Code,
+			)
+		}
+
+		c.JSON(appErr.StatusCode(), ToResponse(appErr, lang, h.translator))
+		return
+	}
+
+	logger.Info("method=%s path=%s code=%s", c.Request.Method, c.FullPath(), output.Code)
+
+	c.JSON(http.StatusCreated, SuccessResponse{
+		Code:    output.Code,
+		Message: h.translator.Translate(lang, output.Code),
+	})
+}

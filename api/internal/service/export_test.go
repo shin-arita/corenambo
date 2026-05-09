@@ -8,6 +8,8 @@ import (
 	"app-api/internal/model"
 )
 
+// ──── UserRegistrationRequestRepository dummies ────
+
 type dummyUserRepo struct{}
 
 func (d *dummyUserRepo) FindByEmail(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
@@ -21,6 +23,12 @@ func (d *dummyUserRepo) UpdateToken(ctx context.Context, req *model.UserRegistra
 }
 func (d *dummyUserRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
+}
+func (d *dummyUserRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *dummyUserRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
 }
 
 type dummyErrorUserRepo struct{}
@@ -37,6 +45,12 @@ func (d *dummyErrorUserRepo) UpdateToken(ctx context.Context, req *model.UserReg
 func (d *dummyErrorUserRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
 }
+func (d *dummyErrorUserRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, errors.New("db error")
+}
+func (d *dummyErrorUserRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
 
 type dummyErrorCreateUserRepo struct{}
 
@@ -51,6 +65,12 @@ func (d *dummyErrorCreateUserRepo) UpdateToken(ctx context.Context, req *model.U
 }
 func (d *dummyErrorCreateUserRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
+}
+func (d *dummyErrorCreateUserRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *dummyErrorCreateUserRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
 }
 
 type dummyErrorUpdateTokenUserRepo struct{}
@@ -77,6 +97,12 @@ func (d *dummyErrorUpdateTokenUserRepo) UpdateToken(ctx context.Context, req *mo
 func (d *dummyErrorUpdateTokenUserRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
 }
+func (d *dummyErrorUpdateTokenUserRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *dummyErrorUpdateTokenUserRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
 
 type dummyVerifiedUserRepo struct{}
 
@@ -99,6 +125,20 @@ func (d *dummyVerifiedUserRepo) UpdateToken(ctx context.Context, req *model.User
 }
 func (d *dummyVerifiedUserRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
+}
+func (d *dummyVerifiedUserRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	now := time.Now()
+	return &model.UserRegistrationRequest{
+		ID:         "uuid",
+		Email:      "test@example.com",
+		TokenHash:  hash,
+		ExpiresAt:  now.Add(60 * time.Minute),
+		VerifiedAt: &now,
+		CreatedAt:  now,
+	}, nil
+}
+func (d *dummyVerifiedUserRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
 }
 
 type dummyRecentlySentUserRepo struct{}
@@ -125,6 +165,12 @@ func (d *dummyRecentlySentUserRepo) UpdateToken(ctx context.Context, req *model.
 func (d *dummyRecentlySentUserRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
 }
+func (d *dummyRecentlySentUserRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *dummyRecentlySentUserRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
 
 type dummyExpiredUserRepo struct{}
 
@@ -150,6 +196,14 @@ func (d *dummyExpiredUserRepo) UpdateToken(ctx context.Context, req *model.UserR
 func (d *dummyExpiredUserRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
 }
+func (d *dummyExpiredUserRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *dummyExpiredUserRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+
+// ──── MailOutboxRepository dummies ────
 
 type dummyOutboxRepo struct{}
 
@@ -166,15 +220,27 @@ func (d *dummyOutboxRepo) ResetStuckProcessing(ctx context.Context, stuckBefore 
 	return nil
 }
 
+// ──── TxManager dummy ────
+
 type dummyTx struct{}
 
 func (d *dummyTx) WithinTransaction(ctx context.Context, fn func(context.Context) error) error {
 	return fn(ctx)
 }
 
+// ──── Clock dummies ────
+
 type dummyClock struct{}
 
 func (d dummyClock) Now() time.Time { return time.Now() }
+
+type fixedClock struct {
+	t time.Time
+}
+
+func (c fixedClock) Now() time.Time { return c.t }
+
+// ──── UUID dummies ────
 
 type dummyUUID struct{}
 
@@ -204,6 +270,8 @@ func (d *dummyErrorSecondUUID) NewV7() (string, error) {
 	return "uuid", nil
 }
 
+// ──── Token dummies ────
+
 type dummyTokenGen struct{}
 
 func (d dummyTokenGen) Generate() (string, error) { return "token", nil }
@@ -212,6 +280,10 @@ type dummyErrorTokenGen struct{}
 
 func (d dummyErrorTokenGen) Generate() (string, error) { return "", errors.New("token error") }
 
+type dummyEmptyTokenGen struct{}
+
+func (d dummyEmptyTokenGen) Generate() (string, error) { return "", nil }
+
 type dummyTokenHasher struct{}
 
 func (d dummyTokenHasher) Hash(s string) (string, error) { return "hash", nil }
@@ -219,6 +291,97 @@ func (d dummyTokenHasher) Hash(s string) (string, error) { return "hash", nil }
 type dummyErrorTokenHasher struct{}
 
 func (d dummyErrorTokenHasher) Hash(s string) (string, error) { return "", errors.New("hash error") }
+
+// ──── URL builder dummies ────
+
+type dummyURL struct{}
+
+func (d dummyURL) Build(s string) string { return "url" }
+
+type captureURLBuilder struct {
+	capturedToken string
+}
+
+func (d *captureURLBuilder) Build(token string) string {
+	d.capturedToken = token
+	return "http://localhost:5173/registration/verify?token=" + token
+}
+
+// ──── Config dummy ────
+
+type dummyConfig struct{}
+
+func (d dummyConfig) RegistrationResendIntervalMinutes() int { return 10 }
+func (d dummyConfig) RegistrationTokenExpiresMinutes() int   { return 60 }
+
+// ──── UserRepository (model) dummies ────
+
+type dummyUserModelRepo struct{}
+
+func (d *dummyUserModelRepo) Create(ctx context.Context, u *model.User) error { return nil }
+
+type dummyErrorUserModelRepo struct{}
+
+func (d *dummyErrorUserModelRepo) Create(ctx context.Context, u *model.User) error {
+	return errors.New("user create error")
+}
+
+// ──── UserEmailRepository dummies ────
+
+type dummyUserEmailRepo struct{}
+
+func (d *dummyUserEmailRepo) FindByEmail(ctx context.Context, email string) (*model.UserEmail, error) {
+	return nil, nil
+}
+func (d *dummyUserEmailRepo) Create(ctx context.Context, e *model.UserEmail) error { return nil }
+
+type dummyErrorUserEmailRepo struct{}
+
+func (d *dummyErrorUserEmailRepo) FindByEmail(ctx context.Context, email string) (*model.UserEmail, error) {
+	return nil, nil
+}
+func (d *dummyErrorUserEmailRepo) Create(ctx context.Context, e *model.UserEmail) error {
+	return errors.New("user email create error")
+}
+
+type dummyExistingEmailRepo struct{}
+
+func (d *dummyExistingEmailRepo) FindByEmail(ctx context.Context, email string) (*model.UserEmail, error) {
+	now := time.Now()
+	return &model.UserEmail{
+		ID:         "existing-id",
+		UserID:     "existing-user",
+		Email:      email,
+		IsPrimary:  true,
+		VerifiedAt: &now,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}, nil
+}
+func (d *dummyExistingEmailRepo) Create(ctx context.Context, e *model.UserEmail) error { return nil }
+
+type dummyErrorFindEmailRepo struct{}
+
+func (d *dummyErrorFindEmailRepo) FindByEmail(ctx context.Context, email string) (*model.UserEmail, error) {
+	return nil, errors.New("find email error")
+}
+func (d *dummyErrorFindEmailRepo) Create(ctx context.Context, e *model.UserEmail) error { return nil }
+
+// ──── UserCredentialRepository dummies ────
+
+type dummyUserCredentialRepo struct{}
+
+func (d *dummyUserCredentialRepo) Create(ctx context.Context, c *model.UserCredential) error {
+	return nil
+}
+
+type dummyErrorUserCredentialRepo struct{}
+
+func (d *dummyErrorUserCredentialRepo) Create(ctx context.Context, c *model.UserCredential) error {
+	return errors.New("credential create error")
+}
+
+// ──── Capture repos ────
 
 type captureCreateRepo struct {
 	capturedEmail string
@@ -237,18 +400,11 @@ func (d *captureCreateRepo) UpdateToken(ctx context.Context, req *model.UserRegi
 func (d *captureCreateRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
 }
-
-type dummyEmptyTokenGen struct{}
-
-func (d dummyEmptyTokenGen) Generate() (string, error) { return "", nil }
-
-type captureURLBuilder struct {
-	capturedToken string
+func (d *captureCreateRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
 }
-
-func (d *captureURLBuilder) Build(token string) string {
-	d.capturedToken = token
-	return "http://localhost:5173/registration/verify?token=" + token
+func (d *captureCreateRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
 }
 
 type captureOutboxRepo struct {
@@ -288,6 +444,12 @@ func (d *captureCreateUserRegistrationRepo) UpdateToken(ctx context.Context, req
 func (d *captureCreateUserRegistrationRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
 }
+func (d *captureCreateUserRegistrationRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *captureCreateUserRegistrationRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
 
 type captureFullOutboxRepo struct {
 	capturedOutbox *model.MailOutbox
@@ -311,24 +473,126 @@ func (d *captureFullOutboxRepo) ResetStuckProcessing(ctx context.Context, stuckB
 	return nil
 }
 
-type fixedClock struct {
-	t time.Time
+// ──── Verify-specific registration request repos ────
+
+type tokenFoundUserRegRepo struct {
+	expiresAt time.Time
 }
 
-func (c fixedClock) Now() time.Time { return c.t }
+func (d *tokenFoundUserRegRepo) FindByEmail(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *tokenFoundUserRegRepo) Create(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *tokenFoundUserRegRepo) UpdateToken(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *tokenFoundUserRegRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *tokenFoundUserRegRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return &model.UserRegistrationRequest{
+		ID:         "uuid",
+		Email:      "test@example.com",
+		TokenHash:  hash,
+		ExpiresAt:  d.expiresAt,
+		VerifiedAt: nil,
+		CreatedAt:  time.Now(),
+	}, nil
+}
+func (d *tokenFoundUserRegRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
 
-type dummyURL struct{}
+type tokenNotFoundUserRegRepo struct{}
 
-func (d dummyURL) Build(s string) string { return "url" }
+func (d *tokenNotFoundUserRegRepo) FindByEmail(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *tokenNotFoundUserRegRepo) Create(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *tokenNotFoundUserRegRepo) UpdateToken(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *tokenNotFoundUserRegRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *tokenNotFoundUserRegRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *tokenNotFoundUserRegRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
 
-type dummyConfig struct{}
+type tokenExpiredUserRegRepo struct{}
 
-func (d dummyConfig) RegistrationResendIntervalMinutes() int { return 10 }
-func (d dummyConfig) RegistrationTokenExpiresMinutes() int   { return 60 }
+func (d *tokenExpiredUserRegRepo) FindByEmail(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *tokenExpiredUserRegRepo) Create(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *tokenExpiredUserRegRepo) UpdateToken(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *tokenExpiredUserRegRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *tokenExpiredUserRegRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	past := time.Now().Add(-2 * time.Hour)
+	return &model.UserRegistrationRequest{
+		ID:         "uuid",
+		Email:      "test@example.com",
+		TokenHash:  hash,
+		ExpiresAt:  past,
+		VerifiedAt: nil,
+		CreatedAt:  past,
+	}, nil
+}
+func (d *tokenExpiredUserRegRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+
+type errorUpdateVerifiedAtRepo struct {
+	expiresAt time.Time
+}
+
+func (d *errorUpdateVerifiedAtRepo) FindByEmail(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *errorUpdateVerifiedAtRepo) Create(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *errorUpdateVerifiedAtRepo) UpdateToken(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *errorUpdateVerifiedAtRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *errorUpdateVerifiedAtRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return &model.UserRegistrationRequest{
+		ID:         "uuid",
+		Email:      "test@example.com",
+		TokenHash:  hash,
+		ExpiresAt:  d.expiresAt,
+		VerifiedAt: nil,
+		CreatedAt:  time.Now(),
+	}, nil
+}
+func (d *errorUpdateVerifiedAtRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return errors.New("update verified at error")
+}
+
+// ──── Service factory helpers ────
 
 func newTestUserRegistrationService() UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyTokenGen{},
@@ -343,6 +607,9 @@ func newTestUserRegistrationService() UserRegistrationService {
 func newTestUserRegistrationServiceWithVerifiedUser() UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyVerifiedUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyTokenGen{},
@@ -357,6 +624,9 @@ func newTestUserRegistrationServiceWithVerifiedUser() UserRegistrationService {
 func newTestUserRegistrationServiceWithRecentlySentUser() UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyRecentlySentUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyTokenGen{},
@@ -371,6 +641,9 @@ func newTestUserRegistrationServiceWithRecentlySentUser() UserRegistrationServic
 func newTestUserRegistrationServiceWithExpiredUser() UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyExpiredUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyTokenGen{},
@@ -385,6 +658,9 @@ func newTestUserRegistrationServiceWithExpiredUser() UserRegistrationService {
 func newTestUserRegistrationServiceWithDBError() UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyErrorUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyTokenGen{},
@@ -399,6 +675,9 @@ func newTestUserRegistrationServiceWithDBError() UserRegistrationService {
 func newTestUserRegistrationServiceWithTokenGenError() UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyErrorTokenGen{},
@@ -413,6 +692,9 @@ func newTestUserRegistrationServiceWithTokenGenError() UserRegistrationService {
 func newTestUserRegistrationServiceWithTokenHashError() UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyTokenGen{},
@@ -427,6 +709,9 @@ func newTestUserRegistrationServiceWithTokenHashError() UserRegistrationService 
 func newTestUserRegistrationServiceWithFirstUUIDError() UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyTokenGen{},
@@ -441,6 +726,9 @@ func newTestUserRegistrationServiceWithFirstUUIDError() UserRegistrationService 
 func newTestUserRegistrationServiceWithSecondUUIDError() UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyTokenGen{},
@@ -455,6 +743,9 @@ func newTestUserRegistrationServiceWithSecondUUIDError() UserRegistrationService
 func newTestUserRegistrationServiceWithCreateUserError() UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyErrorCreateUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyTokenGen{},
@@ -469,6 +760,9 @@ func newTestUserRegistrationServiceWithCreateUserError() UserRegistrationService
 func newTestUserRegistrationServiceWithCaptureRepo(repo *captureCreateRepo) UserRegistrationService {
 	return NewUserRegistrationService(
 		repo,
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyTokenGen{},
@@ -483,6 +777,9 @@ func newTestUserRegistrationServiceWithCaptureRepo(repo *captureCreateRepo) User
 func newTestUserRegistrationServiceWithUpdateTokenError() UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyErrorUpdateTokenUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyTokenGen{},
@@ -497,6 +794,9 @@ func newTestUserRegistrationServiceWithUpdateTokenError() UserRegistrationServic
 func newTestUserRegistrationServiceWithEmptyTokenGen() UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyEmptyTokenGen{},
@@ -511,6 +811,9 @@ func newTestUserRegistrationServiceWithEmptyTokenGen() UserRegistrationService {
 func newTestUserRegistrationServiceWithCaptureURLBuilder(builder *captureURLBuilder) UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyTokenGen{},
@@ -525,6 +828,9 @@ func newTestUserRegistrationServiceWithCaptureURLBuilder(builder *captureURLBuil
 func newTestUserRegistrationServiceWithCaptureOutbox(outbox *captureOutboxRepo) UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		outbox,
 		&dummyTx{},
 		dummyTokenGen{},
@@ -539,6 +845,9 @@ func newTestUserRegistrationServiceWithCaptureOutbox(outbox *captureOutboxRepo) 
 func newTestUserRegistrationServiceWithCaptureUserRegistrationRepo(repo *captureCreateUserRegistrationRepo) UserRegistrationService {
 	return NewUserRegistrationService(
 		repo,
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		&dummyOutboxRepo{},
 		&dummyTx{},
 		dummyTokenGen{},
@@ -553,12 +862,51 @@ func newTestUserRegistrationServiceWithCaptureUserRegistrationRepo(repo *capture
 func newTestUserRegistrationServiceWithCaptureFullOutbox(outbox *captureFullOutboxRepo, clk fixedClock) UserRegistrationService {
 	return NewUserRegistrationService(
 		&dummyUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
 		outbox,
 		&dummyTx{},
 		dummyTokenGen{},
 		dummyTokenHasher{},
 		dummyUUID{},
 		clk,
+		dummyURL{},
+		dummyConfig{},
+	)
+}
+
+func newVerifyService(
+	regRepo interface {
+		FindByTokenHashForUpdate(context.Context, string) (*model.UserRegistrationRequest, error)
+		FindByEmail(context.Context, string) (*model.UserRegistrationRequest, error)
+		Create(context.Context, *model.UserRegistrationRequest) error
+		UpdateToken(context.Context, *model.UserRegistrationRequest) error
+		FindByTokenHash(context.Context, string) (*model.UserRegistrationRequest, error)
+		UpdateVerifiedAt(context.Context, *model.UserRegistrationRequest) error
+	},
+	userModelRepo interface {
+		Create(context.Context, *model.User) error
+	},
+	userEmailRepo interface {
+		FindByEmail(context.Context, string) (*model.UserEmail, error)
+		Create(context.Context, *model.UserEmail) error
+	},
+	userCredentialRepo interface {
+		Create(context.Context, *model.UserCredential) error
+	},
+) UserRegistrationService {
+	return NewUserRegistrationService(
+		regRepo,
+		userModelRepo,
+		userEmailRepo,
+		userCredentialRepo,
+		&dummyOutboxRepo{},
+		&dummyTx{},
+		dummyTokenGen{},
+		dummyTokenHasher{},
+		dummyUUID{},
+		dummyClock{},
 		dummyURL{},
 		dummyConfig{},
 	)

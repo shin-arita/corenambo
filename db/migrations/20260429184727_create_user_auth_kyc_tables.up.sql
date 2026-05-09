@@ -46,18 +46,18 @@ CREATE INDEX user_emails_user_id_idx
     ON user_emails (user_id);
 
 -- ユーザパスワード
-CREATE TABLE user_passwords (
+CREATE TABLE user_credentials (
                                 user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE RESTRICT,
                                 password_hash text NOT NULL,
-                                password_updated_at timestamptz NOT NULL,
+                                password_changed_at timestamptz NOT NULL,
                                 created_at timestamptz NOT NULL DEFAULT NOW()
 );
 
-COMMENT ON TABLE user_passwords IS 'ユーザのパスワード情報を管理するテーブル';
-COMMENT ON COLUMN user_passwords.user_id IS 'ユーザID';
-COMMENT ON COLUMN user_passwords.password_hash IS 'パスワードハッシュ。平文パスワードは保存しない';
-COMMENT ON COLUMN user_passwords.password_updated_at IS 'パスワード更新日時';
-COMMENT ON COLUMN user_passwords.created_at IS '作成日時';
+COMMENT ON TABLE user_credentials IS 'ユーザ認証情報を管理するテーブル';
+COMMENT ON COLUMN user_credentials.user_id IS 'ユーザID';
+COMMENT ON COLUMN user_credentials.password_hash IS 'パスワードハッシュ。平文パスワードは保存しない';
+COMMENT ON COLUMN user_credentials.password_changed_at IS 'パスワード変更日時';
+COMMENT ON COLUMN user_credentials.created_at IS '作成日時';
 
 -- 本人確認
 CREATE TABLE user_verifications (

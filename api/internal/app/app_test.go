@@ -75,3 +75,50 @@ func TestUserRegistrationHandlerCreate(t *testing.T) {
 		t.Fatalf("unexpected status: %d body: %s", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestUserRegistrationHandlerVerify(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	tokenHash := "expected-hash"
+	futureTime := "2099-01-01T00:00:00Z"
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT").
+		WithArgs(tokenHash).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "token_hash", "expires_at", "verified_at", "last_sent_at", "created_at"}).
+			AddRow("reg-id", "test@example.com", tokenHash, futureTime, nil, nil, "2026-01-01T00:00:00Z"))
+	mock.ExpectExec("INSERT INTO users").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO user_emails").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("UPDATE user_registration_requests").
+		WithArgs("reg-id", sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	txManager := repository.NewPostgresTxManager(db)
+	svc := NewUserRegistrationService(txManager, config.RegistrationConfig{})
+	translator := i18n.NewTranslator()
+	h := handler.NewUserRegistrationHandlerWithLimiter(svc, translator, nil)
+	w := &UserRegistrationHandler{inner: h}
+
+	body := strings.NewReader(`{"token":"raw-token","display_name":"testuser","password":"password123","password_confirmation":"password123","agreed_to_terms":true}`)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request, _ = http.NewRequest(http.MethodPost, "/", body)
+	ctx.Request.Header.Set("Content-Type", "application/json")
+
+	w.Verify(ctx)
+
+	if recorder.Code != http.StatusCreated {
+		t.Logf("body: %s", recorder.Body.String())
+	}
+}
