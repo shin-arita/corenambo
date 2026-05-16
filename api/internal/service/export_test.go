@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"app-api/internal/model"
+	"app-api/internal/repository"
+	"app-api/internal/token"
 )
 
 // ──── UserRegistrationRequestRepository dummies ────
@@ -22,6 +24,9 @@ func (d *dummyUserRepo) UpdateToken(ctx context.Context, req *model.UserRegistra
 	return nil
 }
 func (d *dummyUserRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *dummyUserRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
 }
 func (d *dummyUserRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
@@ -45,6 +50,9 @@ func (d *dummyErrorUserRepo) UpdateToken(ctx context.Context, req *model.UserReg
 func (d *dummyErrorUserRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
 }
+func (d *dummyErrorUserRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, errors.New("db error")
+}
 func (d *dummyErrorUserRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, errors.New("db error")
 }
@@ -64,6 +72,9 @@ func (d *dummyErrorCreateUserRepo) UpdateToken(ctx context.Context, req *model.U
 	return nil
 }
 func (d *dummyErrorCreateUserRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *dummyErrorCreateUserRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
 }
 func (d *dummyErrorCreateUserRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
@@ -96,6 +107,9 @@ func (d *dummyErrorUpdateTokenUserRepo) UpdateToken(ctx context.Context, req *mo
 }
 func (d *dummyErrorUpdateTokenUserRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
+}
+func (d *dummyErrorUpdateTokenUserRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return d.FindByEmail(ctx, email)
 }
 func (d *dummyErrorUpdateTokenUserRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
@@ -137,6 +151,9 @@ func (d *dummyVerifiedUserRepo) FindByTokenHashForUpdate(ctx context.Context, ha
 		CreatedAt:  now,
 	}, nil
 }
+func (d *dummyVerifiedUserRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return d.FindByEmail(ctx, email)
+}
 func (d *dummyVerifiedUserRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
 	return nil
 }
@@ -168,6 +185,9 @@ func (d *dummyRecentlySentUserRepo) FindByTokenHash(ctx context.Context, hash st
 func (d *dummyRecentlySentUserRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
 }
+func (d *dummyRecentlySentUserRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return d.FindByEmail(ctx, email)
+}
 func (d *dummyRecentlySentUserRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
 	return nil
 }
@@ -198,6 +218,9 @@ func (d *dummyExpiredUserRepo) FindByTokenHash(ctx context.Context, hash string)
 }
 func (d *dummyExpiredUserRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
+}
+func (d *dummyExpiredUserRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return d.FindByEmail(ctx, email)
 }
 func (d *dummyExpiredUserRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
 	return nil
@@ -400,6 +423,9 @@ func (d *captureCreateRepo) UpdateToken(ctx context.Context, req *model.UserRegi
 func (d *captureCreateRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
 }
+func (d *captureCreateRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
 func (d *captureCreateRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
 }
@@ -442,6 +468,9 @@ func (d *captureCreateUserRegistrationRepo) UpdateToken(ctx context.Context, req
 	return nil
 }
 func (d *captureCreateUserRegistrationRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *captureCreateUserRegistrationRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
 }
 func (d *captureCreateUserRegistrationRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
@@ -501,6 +530,9 @@ func (d *tokenFoundUserRegRepo) FindByTokenHashForUpdate(ctx context.Context, ha
 		CreatedAt:  time.Now(),
 	}, nil
 }
+func (d *tokenFoundUserRegRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
 func (d *tokenFoundUserRegRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
 	return nil
 }
@@ -520,6 +552,9 @@ func (d *tokenNotFoundUserRegRepo) FindByTokenHash(ctx context.Context, hash str
 	return nil, nil
 }
 func (d *tokenNotFoundUserRegRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *tokenNotFoundUserRegRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
 	return nil, nil
 }
 func (d *tokenNotFoundUserRegRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
@@ -551,6 +586,9 @@ func (d *tokenExpiredUserRegRepo) FindByTokenHashForUpdate(ctx context.Context, 
 		CreatedAt:  past,
 	}, nil
 }
+func (d *tokenExpiredUserRegRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
 func (d *tokenExpiredUserRegRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
 	return nil
 }
@@ -581,8 +619,37 @@ func (d *errorUpdateVerifiedAtRepo) FindByTokenHashForUpdate(ctx context.Context
 		CreatedAt:  time.Now(),
 	}, nil
 }
+func (d *errorUpdateVerifiedAtRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
 func (d *errorUpdateVerifiedAtRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
 	return errors.New("update verified at error")
+}
+
+// ──── Concurrent duplicate email dummy ────
+
+type dummyDuplicateEmailCreateRepo struct{}
+
+func (d *dummyDuplicateEmailCreateRepo) FindByEmail(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *dummyDuplicateEmailCreateRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *dummyDuplicateEmailCreateRepo) Create(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return repository.ErrDuplicateEmail
+}
+func (d *dummyDuplicateEmailCreateRepo) UpdateToken(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *dummyDuplicateEmailCreateRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *dummyDuplicateEmailCreateRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *dummyDuplicateEmailCreateRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
 }
 
 // ──── Service factory helpers ────
@@ -876,8 +943,195 @@ func newTestUserRegistrationServiceWithCaptureFullOutbox(outbox *captureFullOutb
 	)
 }
 
+func newTestUserRegistrationServiceWithVerifiedUserAndTokenGenError() UserRegistrationService {
+	return NewUserRegistrationService(
+		&dummyVerifiedUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
+		&dummyOutboxRepo{},
+		&dummyTx{},
+		dummyErrorTokenGen{},
+		dummyTokenHasher{},
+		dummyUUID{},
+		dummyClock{},
+		dummyURL{},
+		dummyConfig{},
+	)
+}
+
+func newTestUserRegistrationServiceWithRecentlySentUserAndTokenGenError() UserRegistrationService {
+	return NewUserRegistrationService(
+		&dummyRecentlySentUserRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
+		&dummyOutboxRepo{},
+		&dummyTx{},
+		dummyErrorTokenGen{},
+		dummyTokenHasher{},
+		dummyUUID{},
+		dummyClock{},
+		dummyURL{},
+		dummyConfig{},
+	)
+}
+
+func newTestUserRegistrationServiceWithRealHasherAndCapture(
+	repo *captureCreateUserRegistrationRepo,
+	builder *captureURLBuilder,
+) UserRegistrationService {
+	return NewUserRegistrationService(
+		repo,
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
+		&dummyOutboxRepo{},
+		&dummyTx{},
+		token.DefaultGenerator{},
+		token.SHA256Hasher{},
+		dummyUUID{},
+		dummyClock{},
+		builder,
+		dummyConfig{},
+	)
+}
+
+func newTestUserRegistrationServiceWithDuplicateEmailRepo() UserRegistrationService {
+	return NewUserRegistrationService(
+		&dummyDuplicateEmailCreateRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
+		&dummyOutboxRepo{},
+		&dummyTx{},
+		dummyTokenGen{},
+		dummyTokenHasher{},
+		dummyUUID{},
+		dummyClock{},
+		dummyURL{},
+		dummyConfig{},
+	)
+}
+
+// ──── CheckToken-specific registration request repos ────
+
+type checkTokenFoundRepo struct {
+	expiresAt  time.Time
+	verifiedAt *time.Time
+}
+
+func (d *checkTokenFoundRepo) FindByEmail(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *checkTokenFoundRepo) Create(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *checkTokenFoundRepo) UpdateToken(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *checkTokenFoundRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return &model.UserRegistrationRequest{
+		ID:         "uuid",
+		Email:      "test@example.com",
+		TokenHash:  hash,
+		ExpiresAt:  d.expiresAt,
+		VerifiedAt: d.verifiedAt,
+		CreatedAt:  time.Now(),
+	}, nil
+}
+func (d *checkTokenFoundRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *checkTokenFoundRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *checkTokenFoundRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+
+type checkTokenNotFoundRepo struct{}
+
+func (d *checkTokenNotFoundRepo) FindByEmail(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *checkTokenNotFoundRepo) Create(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *checkTokenNotFoundRepo) UpdateToken(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *checkTokenNotFoundRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *checkTokenNotFoundRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *checkTokenNotFoundRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *checkTokenNotFoundRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+
+type checkTokenFindErrorRepo struct{}
+
+func (d *checkTokenFindErrorRepo) FindByEmail(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *checkTokenFindErrorRepo) Create(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *checkTokenFindErrorRepo) UpdateToken(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+func (d *checkTokenFindErrorRepo) FindByTokenHash(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, errors.New("db error")
+}
+func (d *checkTokenFindErrorRepo) FindByTokenHashForUpdate(ctx context.Context, hash string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *checkTokenFindErrorRepo) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	return nil, nil
+}
+func (d *checkTokenFindErrorRepo) UpdateVerifiedAt(ctx context.Context, req *model.UserRegistrationRequest) error {
+	return nil
+}
+
+func newCheckTokenService(
+	regRepo interface {
+		FindByTokenHash(context.Context, string) (*model.UserRegistrationRequest, error)
+		FindByEmailForUpdate(context.Context, string) (*model.UserRegistrationRequest, error)
+		FindByTokenHashForUpdate(context.Context, string) (*model.UserRegistrationRequest, error)
+		FindByEmail(context.Context, string) (*model.UserRegistrationRequest, error)
+		Create(context.Context, *model.UserRegistrationRequest) error
+		UpdateToken(context.Context, *model.UserRegistrationRequest) error
+		UpdateVerifiedAt(context.Context, *model.UserRegistrationRequest) error
+	},
+	userEmailRepo interface {
+		FindByEmail(context.Context, string) (*model.UserEmail, error)
+		Create(context.Context, *model.UserEmail) error
+	},
+) UserRegistrationService {
+	return NewUserRegistrationService(
+		regRepo,
+		&dummyUserModelRepo{},
+		userEmailRepo,
+		&dummyUserCredentialRepo{},
+		&dummyOutboxRepo{},
+		&dummyTx{},
+		dummyTokenGen{},
+		dummyTokenHasher{},
+		dummyUUID{},
+		dummyClock{},
+		dummyURL{},
+		dummyConfig{},
+	)
+}
+
 func newVerifyService(
 	regRepo interface {
+		FindByEmailForUpdate(context.Context, string) (*model.UserRegistrationRequest, error)
 		FindByTokenHashForUpdate(context.Context, string) (*model.UserRegistrationRequest, error)
 		FindByEmail(context.Context, string) (*model.UserRegistrationRequest, error)
 		Create(context.Context, *model.UserRegistrationRequest) error

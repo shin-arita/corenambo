@@ -85,7 +85,7 @@ docker compose up -d db api redis worker mail
 | 仮登録 POST /api/v1/user-registration-requests | HTTP 201 / code=USER_REGISTRATION_REQUEST_CREATED |
 | DB確認 | user_registration_requests に1件作成されていること |
 | トークン取得 | Mailpit API からメール本文のトークンを抽出できること |
-| 本登録 POST /api/v1/user-registrations/verify | HTTP 201 / code=USER_REGISTRATION_VERIFIED |
+| 本登録 POST /api/v1/user-registrations/verify?token={token} | HTTP 201 / code=USER_REGISTRATION_VERIFIED |
 | DB確認 users | users テーブルに1件作成されていること |
 | DB確認 user_emails | is_primary=true であること |
 | DB確認 user_emails | verified_at がセットされていること |

@@ -6,10 +6,12 @@ const (
 
 	CodeBadRequest          = "BAD_REQUEST"
 	CodeValidationError     = "VALIDATION_ERROR"
+	CodeTooManyRequests     = "TOO_MANY_REQUESTS"
 	CodeInternalServerError = "INTERNAL_SERVER_ERROR"
 
 	CodeUserAlreadyRegistered = "USER_ALREADY_REGISTERED"
 
+	CodeRegistrationTokenValid   = "REGISTRATION_TOKEN_VALID"
 	CodeInvalidRegistrationToken = "INVALID_REGISTRATION_TOKEN"
 	CodeExpiredRegistrationToken = "EXPIRED_REGISTRATION_TOKEN"
 	CodeUsedRegistrationToken    = "USED_REGISTRATION_TOKEN"
@@ -21,6 +23,7 @@ const (
 
 	CodeDisplayNameRequired          = "DISPLAY_NAME_REQUIRED"
 	CodePasswordRequired             = "PASSWORD_REQUIRED"
+	CodePasswordTooWeak              = "PASSWORD_TOO_WEAK"
 	CodePasswordConfirmationRequired = "PASSWORD_CONFIRMATION_REQUIRED"
 	CodePasswordConfirmationNotMatch = "PASSWORD_CONFIRMATION_NOT_MATCH"
 	CodeAgreedToTermsRequired        = "AGREED_TO_TERMS_REQUIRED"

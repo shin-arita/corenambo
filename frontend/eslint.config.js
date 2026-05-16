@@ -1,12 +1,14 @@
 import js from "@eslint/js";
+import tseslint from "typescript-eslint";
 import reactPlugin from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 
-export default [
+export default tseslint.config(
   js.configs.recommended,
+  ...tseslint.configs.recommended,
   {
-    files: ["src/**/*.{js,jsx}"],
+    files: ["src/**/*.{ts,tsx}"],
     plugins: {
       react: reactPlugin,
       "react-hooks": reactHooks,
@@ -14,9 +16,6 @@ export default [
     languageOptions: {
       globals: {
         ...globals.browser,
-      },
-      parserOptions: {
-        ecmaFeatures: { jsx: true },
       },
     },
     settings: {
@@ -30,7 +29,7 @@ export default [
     },
   },
   {
-    files: ["src/test/**/*.{js,jsx}", "**/*.test.{js,jsx}"],
+    files: ["src/test/**/*.ts", "**/*.test.{ts,tsx}"],
     languageOptions: {
       globals: {
         ...globals.browser,
@@ -44,4 +43,4 @@ export default [
       },
     },
   },
-];
+);

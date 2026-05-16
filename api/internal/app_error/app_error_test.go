@@ -36,6 +36,18 @@ func TestNewBadRequest(t *testing.T) {
 	}
 }
 
+func TestNewTooManyRequests(t *testing.T) {
+	err := NewTooManyRequests()
+
+	if err.Code != i18n.CodeTooManyRequests {
+		t.Fatalf("unexpected code: %s", err.Code)
+	}
+
+	if err.Status != http.StatusTooManyRequests {
+		t.Fatalf("unexpected status: %d", err.Status)
+	}
+}
+
 func TestNewConflict(t *testing.T) {
 	err := NewConflict("CONFLICT")
 

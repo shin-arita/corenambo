@@ -227,7 +227,7 @@ resendAvailableAt := req.LastSentAt.Add(
     time.Duration(s.config.RegistrationResendIntervalMinutes()) * time.Minute,
 )
 if now.Before(resendAvailableAt) {
-    return &CreateUserRegistrationOutput{Code: ...}, nil
+    return nil  // トランザクションクロージャを早期終了（outbox登録不要）
 }
 ```
 
@@ -293,7 +293,8 @@ logger.Info("method=%s path=%s code=%s",
 if h.rateLimiter != nil {
     if !h.rateLimiter.AllowIP(c.Request.Context(), c.ClientIP(),
         h.rateLimitConfig.RateLimitIPPerMinute()) {
-        c.JSON(http.StatusTooManyRequests, ...)
+        appErr := app_error.NewTooManyRequests()
+        c.JSON(appErr.StatusCode(), ToResponse(appErr, lang, h.translator))
         return
     }
 }
@@ -333,6 +334,33 @@ get_token_from_mailpit() {
 - 送信後、`mail_outboxes.payload` は `'{}'` に上書きされる（設計 §16 参照）
 - そのため E2E テスト実行時点では `payload` からトークンを取得できない
 - Mailpit の REST API（`GET /api/v1/messages`, `GET /api/v1/message/{id}`）を通じて送信済みメールのテキスト本文を取得し、URL中のトークンを抽出する
+
+---
+
+---
+
+## トークン状態確認API（GET Verify）セキュリティ設計
+
+### 18. 副作用なし設計
+
+GET `/api/v1/user-registrations/verify` は完全に読み取り専用として実装する。
+
+| 制約 | 理由 |
+|-----|------|
+| トランザクションなし | 書き込みがないため不要。不要なトランザクションはDB接続プールを圧迫する |
+| FOR UPDATEなし | 読み取り専用のためロック不要。並行リクエストが互いに影響しない |
+| bcryptなし | パスワード処理は本登録（POST）でのみ行う。不正トークンへの bcrypt DoS を構造的に防ぐ |
+
+### 19. GETのレートリミット
+
+```go
+// handler/user_registration_handler.go（CheckToken）
+h.rateLimiter.AllowIP(ctx, ip, h.rateLimitConfig.RateLimitIPPerMinute())
+```
+
+- IPアドレス単位で 5回/分（環境変数 `RATE_LIMIT_IP_PER_MINUTE`）
+- POST（仮登録・本登録）と同一の Redis キー `rate_limit:ip:{ip}` および制限値を共有する
+- 専用カウンタを設けないことで設定の複雑化を防ぐ
 
 ---
 

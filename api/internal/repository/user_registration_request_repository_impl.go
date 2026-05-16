@@ -3,8 +3,11 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"app-api/internal/model"
+
+	"github.com/lib/pq"
 )
 
 type userRegistrationRequestRepository struct {
@@ -28,6 +31,42 @@ SELECT
 FROM user_registration_requests
 WHERE email = $1
 LIMIT 1
+`
+
+	entity := &model.UserRegistrationRequest{}
+	err := getExecutor(ctx, r.db).QueryRowContext(ctx, query, email).Scan(
+		&entity.ID,
+		&entity.Email,
+		&entity.TokenHash,
+		&entity.ExpiresAt,
+		&entity.VerifiedAt,
+		&entity.LastSentAt,
+		&entity.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return entity, nil
+}
+
+func (r *userRegistrationRequestRepository) FindByEmailForUpdate(ctx context.Context, email string) (*model.UserRegistrationRequest, error) {
+	const query = `
+SELECT
+        id,
+        email,
+        token_hash,
+        expires_at,
+        verified_at,
+        last_sent_at,
+        created_at
+FROM user_registration_requests
+WHERE email = $1
+LIMIT 1
+FOR UPDATE
 `
 
 	entity := &model.UserRegistrationRequest{}
@@ -111,7 +150,15 @@ INSERT INTO user_registration_requests (
 		entity.LastSentAt,
 		entity.CreatedAt,
 	)
-	return err
+	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" &&
+			pqErr.Constraint == "uq_user_registration_requests_email" {
+			return ErrDuplicateEmail
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *userRegistrationRequestRepository) UpdateToken(ctx context.Context, entity *model.UserRegistrationRequest) error {

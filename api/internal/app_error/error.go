@@ -42,6 +42,13 @@ func NewConflict(code string) *AppError {
 	}
 }
 
+func NewTooManyRequests() *AppError {
+	return &AppError{
+		Code:   i18n.CodeTooManyRequests,
+		Status: http.StatusTooManyRequests,
+	}
+}
+
 func NewValidation(fieldErrors map[string][]FieldError) *AppError {
 	return &AppError{
 		Code:        i18n.CodeValidationError,

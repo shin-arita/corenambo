@@ -17,11 +17,15 @@ import (
 )
 
 type mockService struct {
-	out       *service.CreateUserRegistrationOutput
-	err       error
-	input     service.CreateUserRegistrationInput
-	verifyOut *service.VerifyUserRegistrationOutput
-	verifyErr error
+	out              *service.CreateUserRegistrationOutput
+	err              error
+	input            service.CreateUserRegistrationInput
+	verifyOut        *service.VerifyUserRegistrationOutput
+	verifyErr        error
+	verifyInput      service.VerifyUserRegistrationInput
+	checkTokenOut    *service.CheckTokenOutput
+	checkTokenErr    error
+	checkTokenInput  service.CheckTokenInput
 }
 
 func (m *mockService) Create(ctx context.Context, in service.CreateUserRegistrationInput) (*service.CreateUserRegistrationOutput, error) {
@@ -30,11 +34,22 @@ func (m *mockService) Create(ctx context.Context, in service.CreateUserRegistrat
 }
 
 func (m *mockService) Verify(ctx context.Context, in service.VerifyUserRegistrationInput) (*service.VerifyUserRegistrationOutput, error) {
+	m.verifyInput = in
 	if m.verifyOut != nil || m.verifyErr != nil {
 		return m.verifyOut, m.verifyErr
 	}
 	return &service.VerifyUserRegistrationOutput{
 		Code: i18n.CodeUserRegistrationVerified,
+	}, nil
+}
+
+func (m *mockService) CheckToken(ctx context.Context, in service.CheckTokenInput) (*service.CheckTokenOutput, error) {
+	m.checkTokenInput = in
+	if m.checkTokenOut != nil || m.checkTokenErr != nil {
+		return m.checkTokenOut, m.checkTokenErr
+	}
+	return &service.CheckTokenOutput{
+		Code: i18n.CodeRegistrationTokenValid,
 	}, nil
 }
 
@@ -290,6 +305,14 @@ func TestUserRegistrationHandlerCreateRateLimitIP(t *testing.T) {
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatal(w.Code)
 	}
+
+	var res map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to parse rate limit response body: %v", err)
+	}
+	if res["code"] != i18n.CodeTooManyRequests {
+		t.Fatalf("expected code %q, got %v", i18n.CodeTooManyRequests, res["code"])
+	}
 }
 
 func TestUserRegistrationHandlerCreateRateLimitEmail(t *testing.T) {
@@ -325,6 +348,14 @@ func TestUserRegistrationHandlerCreateRateLimitEmail(t *testing.T) {
 
 	if w2.Code != http.StatusTooManyRequests {
 		t.Fatal(w2.Code)
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(w2.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to parse rate limit response body: %v", err)
+	}
+	if res["code"] != i18n.CodeTooManyRequests {
+		t.Fatalf("expected code %q, got %v", i18n.CodeTooManyRequests, res["code"])
 	}
 }
 
@@ -458,7 +489,8 @@ func TestUserRegistrationHandlerCreateBodyExceedsSizeLimit(t *testing.T) {
 	}
 }
 
-const validVerifyBody = `{"token":"valid-token","display_name":"testuser","password":"password123","password_confirmation":"password123","agreed_to_terms":true}`
+const validVerifyBody = `{"display_name":"testuser","password":"password123","password_confirmation":"password123","agreed_to_terms":true}`
+const validVerifyURL = "/verify?token=valid-token"
 
 func TestUserRegistrationHandlerVerifySuccess(t *testing.T) {
 	svc := &mockService{
@@ -470,7 +502,7 @@ func TestUserRegistrationHandlerVerifySuccess(t *testing.T) {
 	h := newTestHandler(svc)
 	r := newVerifyRouter(h)
 
-	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req := httptest.NewRequest(http.MethodPost, validVerifyURL, bytes.NewBufferString(validVerifyBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -492,13 +524,40 @@ func TestUserRegistrationHandlerVerifySuccess(t *testing.T) {
 	if res["message"] == "" {
 		t.Fatal("message is empty")
 	}
+
+	if svc.verifyInput.Token != "valid-token" {
+		t.Fatalf("expected query token passed to service, got %q", svc.verifyInput.Token)
+	}
+}
+
+func TestUserRegistrationHandlerVerifyMissingQueryToken(t *testing.T) {
+	h := newTestHandler(&mockService{})
+	r := newVerifyRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if res["code"] != i18n.CodeInvalidRegistrationToken {
+		t.Fatalf("expected code %q, got %v", i18n.CodeInvalidRegistrationToken, res["code"])
+	}
 }
 
 func TestUserRegistrationHandlerVerifyBadRequest(t *testing.T) {
 	h := newTestHandler(&mockService{})
 	r := newVerifyRouter(h)
 
-	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString("{invalid"))
+	req := httptest.NewRequest(http.MethodPost, validVerifyURL, bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -515,7 +574,7 @@ func TestUserRegistrationHandlerVerifyTokenInvalid(t *testing.T) {
 	})
 	r := newVerifyRouter(h)
 
-	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req := httptest.NewRequest(http.MethodPost, validVerifyURL, bytes.NewBufferString(validVerifyBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -532,7 +591,7 @@ func TestUserRegistrationHandlerVerifyTokenExpired(t *testing.T) {
 	})
 	r := newVerifyRouter(h)
 
-	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req := httptest.NewRequest(http.MethodPost, validVerifyURL, bytes.NewBufferString(validVerifyBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -549,7 +608,7 @@ func TestUserRegistrationHandlerVerifyAlreadyVerified(t *testing.T) {
 	})
 	r := newVerifyRouter(h)
 
-	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req := httptest.NewRequest(http.MethodPost, validVerifyURL, bytes.NewBufferString(validVerifyBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -566,7 +625,7 @@ func TestUserRegistrationHandlerVerifyUserAlreadyRegistered(t *testing.T) {
 	})
 	r := newVerifyRouter(h)
 
-	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req := httptest.NewRequest(http.MethodPost, validVerifyURL, bytes.NewBufferString(validVerifyBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -585,7 +644,7 @@ func TestUserRegistrationHandlerVerifyValidationError(t *testing.T) {
 	})
 	r := newVerifyRouter(h)
 
-	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req := httptest.NewRequest(http.MethodPost, validVerifyURL, bytes.NewBufferString(validVerifyBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -602,7 +661,7 @@ func TestUserRegistrationHandlerVerifyInternalError(t *testing.T) {
 	})
 	r := newVerifyRouter(h)
 
-	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req := httptest.NewRequest(http.MethodPost, validVerifyURL, bytes.NewBufferString(validVerifyBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -628,7 +687,7 @@ func TestUserRegistrationHandlerVerifyRateLimitIP(t *testing.T) {
 	r := newVerifyRouter(h)
 
 	for i := 0; i < 5; i++ {
-		req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+		req := httptest.NewRequest(http.MethodPost, validVerifyURL, bytes.NewBufferString(validVerifyBody))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
@@ -637,12 +696,20 @@ func TestUserRegistrationHandlerVerifyRateLimitIP(t *testing.T) {
 		}
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req := httptest.NewRequest(http.MethodPost, validVerifyURL, bytes.NewBufferString(validVerifyBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429, got %d", w.Code)
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to parse rate limit response body: %v", err)
+	}
+	if res["code"] != i18n.CodeTooManyRequests {
+		t.Fatalf("expected code %q, got %v", i18n.CodeTooManyRequests, res["code"])
 	}
 }
 
@@ -654,7 +721,7 @@ func TestUserRegistrationHandlerVerifyBodyExceedsSizeLimit(t *testing.T) {
 	for i := range body {
 		body[i] = 'a'
 	}
-	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, validVerifyURL, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -675,7 +742,7 @@ func TestUserRegistrationHandlerVerifyDefaultLanguage(t *testing.T) {
 	h := newTestHandler(svc)
 	r := newVerifyRouter(h)
 
-	req := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewBufferString(validVerifyBody))
+	req := httptest.NewRequest(http.MethodPost, validVerifyURL, bytes.NewBufferString(validVerifyBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -683,6 +750,216 @@ func TestUserRegistrationHandlerVerifyDefaultLanguage(t *testing.T) {
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", w.Code)
+	}
+}
+
+func newCheckTokenRouter(h *UserRegistrationHandler) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/verify", h.CheckToken)
+	return r
+}
+
+const validCheckTokenURL = "/verify?token=valid-token"
+
+func TestUserRegistrationHandlerCheckTokenSuccess(t *testing.T) {
+	svc := &mockService{
+		checkTokenOut: &service.CheckTokenOutput{
+			Code: i18n.CodeRegistrationTokenValid,
+		},
+	}
+
+	h := newTestHandler(svc)
+	r := newCheckTokenRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, validCheckTokenURL, nil)
+	req.Header.Set("Accept-Language", "ja")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body: %s", w.Code, w.Body.String())
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+
+	if res["code"] != i18n.CodeRegistrationTokenValid {
+		t.Fatalf("expected code %q, got %v", i18n.CodeRegistrationTokenValid, res["code"])
+	}
+
+	if res["message"] == "" {
+		t.Fatal("message is empty")
+	}
+
+	if svc.checkTokenInput.Token != "valid-token" {
+		t.Fatalf("expected token passed to service, got %q", svc.checkTokenInput.Token)
+	}
+}
+
+func TestUserRegistrationHandlerCheckTokenMissingToken(t *testing.T) {
+	h := newTestHandler(&mockService{})
+	r := newCheckTokenRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if res["code"] != i18n.CodeInvalidRegistrationToken {
+		t.Fatalf("expected code %q, got %v", i18n.CodeInvalidRegistrationToken, res["code"])
+	}
+}
+
+func TestUserRegistrationHandlerCheckTokenInvalid(t *testing.T) {
+	h := newTestHandler(&mockService{
+		checkTokenErr: app_error.NewBadRequest(i18n.CodeInvalidRegistrationToken),
+	})
+	r := newCheckTokenRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, validCheckTokenURL, nil)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestUserRegistrationHandlerCheckTokenExpired(t *testing.T) {
+	h := newTestHandler(&mockService{
+		checkTokenErr: app_error.NewBadRequest(i18n.CodeExpiredRegistrationToken),
+	})
+	r := newCheckTokenRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, validCheckTokenURL, nil)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestUserRegistrationHandlerCheckTokenUsed(t *testing.T) {
+	h := newTestHandler(&mockService{
+		checkTokenErr: app_error.NewConflict(i18n.CodeUsedRegistrationToken),
+	})
+	r := newCheckTokenRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, validCheckTokenURL, nil)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", w.Code)
+	}
+}
+
+func TestUserRegistrationHandlerCheckTokenUserAlreadyRegistered(t *testing.T) {
+	h := newTestHandler(&mockService{
+		checkTokenErr: app_error.NewConflict(i18n.CodeUserAlreadyRegistered),
+	})
+	r := newCheckTokenRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, validCheckTokenURL, nil)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", w.Code)
+	}
+}
+
+func TestUserRegistrationHandlerCheckTokenInternalError(t *testing.T) {
+	h := newTestHandler(&mockService{
+		checkTokenErr: app_error.NewInternal(nil),
+	})
+	r := newCheckTokenRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, validCheckTokenURL, nil)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestUserRegistrationHandlerCheckTokenRateLimitIP(t *testing.T) {
+	svc := &mockService{
+		checkTokenOut: &service.CheckTokenOutput{
+			Code: i18n.CodeRegistrationTokenValid,
+		},
+	}
+
+	h := NewUserRegistrationHandlerWithLimiter(
+		svc,
+		i18n.NewTranslator(),
+		newRateLimiter(&keyedRateLimitStore{}),
+	)
+	r := newCheckTokenRouter(h)
+
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest(http.MethodGet, validCheckTokenURL, nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("request %d: expected 200, got %d", i+1, w.Code)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, validCheckTokenURL, nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d", w.Code)
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to parse rate limit response body: %v", err)
+	}
+	if res["code"] != i18n.CodeTooManyRequests {
+		t.Fatalf("expected code %q, got %v", i18n.CodeTooManyRequests, res["code"])
+	}
+}
+
+func TestUserRegistrationHandlerCheckTokenDefaultLanguage(t *testing.T) {
+	h := newTestHandler(&mockService{})
+	r := newCheckTokenRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, validCheckTokenURL, nil)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if res["message"] == "" {
+		t.Fatal("message is empty")
 	}
 }
 

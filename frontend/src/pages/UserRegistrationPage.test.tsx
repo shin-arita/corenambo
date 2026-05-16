@@ -33,7 +33,7 @@ describe("UserRegistrationPage", () => {
     it("タイトルと説明文が表示される", () => {
       renderPage();
       expect(screen.getByRole("heading", { name: "仮会員登録" })).toBeInTheDocument();
-      expect(screen.getByText("メールアドレスを入力すると、本登録用のリンクをお送りします。")).toBeInTheDocument();
+      expect(screen.getByText("メールアドレスを入力すると、本登録用のリンクをお送りします")).toBeInTheDocument();
     });
 
     it("メールアドレスと確認用のinputが表示される", () => {
@@ -96,10 +96,10 @@ describe("UserRegistrationPage", () => {
     });
 
     it("成功時に /registration/complete へ遷移する", async () => {
-      fetch.mockResolvedValueOnce({
+      vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ expires_minutes: 60 }),
-      });
+      } as unknown as Response);
 
       const { container } = renderWithRoutes();
       const inputs = container.querySelectorAll("input[type='email']");
@@ -113,10 +113,10 @@ describe("UserRegistrationPage", () => {
     });
 
     it("成功時に state.email に入力メールアドレスが渡される", async () => {
-      fetch.mockResolvedValueOnce({
+      vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ expires_minutes: 60 }),
-      });
+      } as unknown as Response);
 
       const { container } = renderWithRoutes();
       const inputs = container.querySelectorAll("input[type='email']");
@@ -125,15 +125,15 @@ describe("UserRegistrationPage", () => {
       await userEvent.click(screen.getByRole("button", { name: "登録メールを送信する" }));
 
       await waitFor(() => screen.getByTestId("complete-state"));
-      const state = JSON.parse(screen.getByTestId("complete-state").textContent);
+      const state = JSON.parse(screen.getByTestId("complete-state").textContent ?? "{}");
       expect(state.email).toBe("test@example.com");
     });
 
     it("成功時に state.expiresMinutes に APIの expires_minutes が渡される", async () => {
-      fetch.mockResolvedValueOnce({
+      vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ expires_minutes: 60 }),
-      });
+      } as unknown as Response);
 
       const { container } = renderWithRoutes();
       const inputs = container.querySelectorAll("input[type='email']");
@@ -142,15 +142,15 @@ describe("UserRegistrationPage", () => {
       await userEvent.click(screen.getByRole("button", { name: "登録メールを送信する" }));
 
       await waitFor(() => screen.getByTestId("complete-state"));
-      const state = JSON.parse(screen.getByTestId("complete-state").textContent);
+      const state = JSON.parse(screen.getByTestId("complete-state").textContent ?? "{}");
       expect(state.expiresMinutes).toBe(60);
     });
 
     it("expires_minutes が 30 の場合 state.expiresMinutes が 30 になる", async () => {
-      fetch.mockResolvedValueOnce({
+      vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ expires_minutes: 30 }),
-      });
+      } as unknown as Response);
 
       const { container } = renderWithRoutes();
       const inputs = container.querySelectorAll("input[type='email']");
@@ -159,12 +159,12 @@ describe("UserRegistrationPage", () => {
       await userEvent.click(screen.getByRole("button", { name: "登録メールを送信する" }));
 
       await waitFor(() => screen.getByTestId("complete-state"));
-      const state = JSON.parse(screen.getByTestId("complete-state").textContent);
+      const state = JSON.parse(screen.getByTestId("complete-state").textContent ?? "{}");
       expect(state.expiresMinutes).toBe(30);
     });
 
     it("VALIDATION_ERRORのとき、フィールドエラーが表示される", async () => {
-      fetch.mockResolvedValueOnce({
+      vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         json: async () => ({
           code: "VALIDATION_ERROR",
@@ -172,7 +172,7 @@ describe("UserRegistrationPage", () => {
             email: [{ message: "このメールアドレスはすでに使用されています" }],
           },
         }),
-      });
+      } as unknown as Response);
 
       renderPage();
       const inputs = screen.getAllByPlaceholderText("example@mail.com");
@@ -184,10 +184,10 @@ describe("UserRegistrationPage", () => {
     });
 
     it("その他のAPIエラー時にフォームエラーが表示される", async () => {
-      fetch.mockResolvedValueOnce({
+      vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         json: async () => ({ message: "サーバーエラーが発生しました" }),
-      });
+      } as unknown as Response);
 
       renderPage();
       const inputs = screen.getAllByPlaceholderText("example@mail.com");
@@ -199,7 +199,7 @@ describe("UserRegistrationPage", () => {
     });
 
     it("VALIDATION_ERRORのとき、email_confirmationフィールドエラーが表示される", async () => {
-      fetch.mockResolvedValueOnce({
+      vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         json: async () => ({
           code: "VALIDATION_ERROR",
@@ -207,7 +207,7 @@ describe("UserRegistrationPage", () => {
             email_confirmation: [{ message: "確認用メールアドレスが一致しません" }],
           },
         }),
-      });
+      } as unknown as Response);
 
       renderPage();
       const inputs = screen.getAllByPlaceholderText("example@mail.com");
@@ -219,14 +219,14 @@ describe("UserRegistrationPage", () => {
     });
 
     it("VALIDATION_ERRORだが既知フィールドエラーがない場合はフォームエラーが表示される", async () => {
-      fetch.mockResolvedValueOnce({
+      vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         json: async () => ({
           code: "VALIDATION_ERROR",
           errors: {},
           message: "バリデーションエラーが発生しました",
         }),
-      });
+      } as unknown as Response);
 
       renderPage();
       const inputs = screen.getAllByPlaceholderText("example@mail.com");
@@ -238,10 +238,10 @@ describe("UserRegistrationPage", () => {
     });
 
     it("APIエラーにmessageがない場合はデフォルトエラーメッセージが表示される", async () => {
-      fetch.mockResolvedValueOnce({
+      vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         json: async () => ({ code: "INTERNAL_ERROR" }),
-      });
+      } as unknown as Response);
 
       renderPage();
       const inputs = screen.getAllByPlaceholderText("example@mail.com");
@@ -249,11 +249,11 @@ describe("UserRegistrationPage", () => {
       await userEvent.type(inputs[1], "test@example.com");
       await userEvent.click(screen.getByRole("button", { name: "登録メールを送信する" }));
 
-      expect(await screen.findByText("エラーが発生しました。しばらく経ってから再度お試しください。")).toBeInTheDocument();
+      expect(await screen.findByText("エラーが発生しました。しばらく経ってから再度お試しください")).toBeInTheDocument();
     });
 
     it("通信エラー時に通信エラーメッセージが表示される", async () => {
-      fetch.mockRejectedValueOnce(new Error("network error"));
+      vi.mocked(fetch).mockRejectedValueOnce(new Error("network error"));
 
       renderPage();
       const inputs = screen.getAllByPlaceholderText("example@mail.com");
@@ -261,12 +261,12 @@ describe("UserRegistrationPage", () => {
       await userEvent.type(inputs[1], "test@example.com");
       await userEvent.click(screen.getByRole("button", { name: "登録メールを送信する" }));
 
-      expect(await screen.findByText("通信エラーが発生しました。しばらく経ってから再度お試しください。")).toBeInTheDocument();
+      expect(await screen.findByText("通信エラーが発生しました。しばらく経ってから再度お試しください")).toBeInTheDocument();
     });
 
     it("送信中はボタンが無効化される", async () => {
-      fetch.mockImplementationOnce(
-        () => new Promise((resolve) => setTimeout(() => resolve({ ok: true, json: async () => ({ expires_minutes: 60 }) }), 100))
+      vi.mocked(fetch).mockImplementationOnce(
+        () => new Promise((resolve) => setTimeout(() => resolve({ ok: true, json: async () => ({ expires_minutes: 60 }) } as unknown as Response), 100))
       );
 
       renderPage();

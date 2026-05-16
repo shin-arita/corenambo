@@ -3,7 +3,12 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, it, expect } from "vitest";
 import UserRegistrationCompletePage from "./UserRegistrationCompletePage";
 
-function renderWithState(state) {
+interface PageState {
+  email: string;
+  expiresMinutes: number | null;
+}
+
+function renderWithState(state: PageState | null) {
   return render(
     <MemoryRouter initialEntries={[{ pathname: "/registration/complete", state }]}>
       <Routes>
@@ -40,14 +45,14 @@ describe("UserRegistrationCompletePage", () => {
 
     it("本登録リンク送信メッセージが表示される", () => {
       renderWithState({ email: "test@example.com", expiresMinutes: 60 });
-      expect(screen.getByText("に本登録用のリンクを送信しました。", { exact: false })).toBeInTheDocument();
+      expect(screen.getByText("に本登録用のリンクを送信しました", { exact: false })).toBeInTheDocument();
     });
   });
 
   describe("有効期限の表示", () => {
     it("expiresMinutesがある場合、有効期限が表示される", () => {
       renderWithState({ email: "test@example.com", expiresMinutes: 60 });
-      expect(screen.getByText("このリンクの有効期限は60分です。")).toBeInTheDocument();
+      expect(screen.getByText(/このリンクの有効期限は.*60.*分です/)).toBeInTheDocument();
     });
 
     it("expiresMinutesがnullの場合、有効期限は表示されない", () => {
@@ -57,19 +62,19 @@ describe("UserRegistrationCompletePage", () => {
 
     it("expiresMinutes が 30 の場合、有効期限文言に「30分」が含まれる", () => {
       renderWithState({ email: "test@example.com", expiresMinutes: 30 });
-      expect(screen.getByText("このリンクの有効期限は30分です。")).toBeInTheDocument();
+      expect(screen.getByText(/このリンクの有効期限は.*30.*分です/)).toBeInTheDocument();
     });
   });
 
   describe("注意事項", () => {
     it("迷惑メールフォルダの注意書きが表示される", () => {
       renderWithState({ email: "test@example.com", expiresMinutes: 60 });
-      expect(screen.getByText("※メールが届かない場合は、迷惑メールフォルダをご確認ください。")).toBeInTheDocument();
+      expect(screen.getByText("※メールが届かない場合は、迷惑メールフォルダをご確認ください")).toBeInTheDocument();
     });
 
     it("メイン指示文が表示される", () => {
       renderWithState({ email: "test@example.com", expiresMinutes: 60 });
-      expect(screen.getByText("メール内のリンクをクリックして、会員登録を完了してください。")).toBeInTheDocument();
+      expect(screen.getByText("メール内のリンクをクリックして、会員登録を完了してください")).toBeInTheDocument();
     });
   });
 

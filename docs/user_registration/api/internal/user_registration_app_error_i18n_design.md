@@ -25,7 +25,7 @@ APIレスポンスは `code + message` 形式で統一し、
 ```json
 {
   "code": "USER_REGISTRATION_REQUEST_CREATED",
-  "message": "仮登録メールを送信しました。メールをご確認ください。"
+  "message": "仮登録メールを送信しました。メールをご確認ください"
 }
 ```
 
@@ -36,7 +36,7 @@ APIレスポンスは `code + message` 形式で統一し、
 ```json
 {
   "code": "BAD_REQUEST",
-  "message": "リクエストが不正です。"
+  "message": "リクエストが不正です"
 }
 ```
 
@@ -47,12 +47,12 @@ APIレスポンスは `code + message` 形式で統一し、
 ```json
 {
   "code": "VALIDATION_ERROR",
-  "message": "入力内容に誤りがあります。",
+  "message": "入力内容に誤りがあります",
   "errors": {
     "email": [
       {
         "code": "EMAIL_REQUIRED",
-        "message": "メールアドレスを入力してください。"
+        "message": "メールアドレスを入力してください"
       }
     ]
   }

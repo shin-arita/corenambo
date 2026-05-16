@@ -1,6 +1,11 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+interface LocationState {
+  email: string;
+  expiresMinutes: number | null;
+}
+
 export default function UserRegistrationCompletePage() {
   const { state } = useLocation();
   const navigate = useNavigate();
@@ -13,7 +18,7 @@ export default function UserRegistrationCompletePage() {
 
   if (!state) return null;
 
-  const { email, expiresMinutes } = state;
+  const { email, expiresMinutes } = state as LocationState;
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-12">
@@ -24,24 +29,24 @@ export default function UserRegistrationCompletePage() {
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-8 py-10">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-8 py-10 text-center">
           <h1 className="text-xl font-bold text-slate-900 mb-2">
             仮会員登録メールを送信しました
           </h1>
           <p className="text-sm text-slate-500 mb-6">
             <span className="font-medium text-slate-700">{email}</span>{" "}
-            に本登録用のリンクを送信しました。
+            に本登録用のリンクを送信しました
           </p>
 
-          <div className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-4 text-sm text-slate-600 space-y-2">
-            <p>メール内のリンクをクリックして、会員登録を完了してください。</p>
+          <div className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-4 text-sm text-slate-600 space-y-2 text-center">
+            <p>メール内のリンクをクリックして、会員登録を完了してください</p>
             {expiresMinutes != null && (
               <p className="text-xs text-slate-400">
-                このリンクの有効期限は{expiresMinutes}分です。
+                このリンクの有効期限は{expiresMinutes}分です
               </p>
             )}
             <p className="text-xs text-slate-400">
-              ※メールが届かない場合は、迷惑メールフォルダをご確認ください。
+              ※メールが届かない場合は、迷惑メールフォルダをご確認ください
             </p>
           </div>
         </div>

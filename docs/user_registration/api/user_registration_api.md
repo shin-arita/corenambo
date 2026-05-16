@@ -8,7 +8,7 @@
 本APIはセキュリティ要件として以下を満たす：
 
 - メールアドレスの存在有無を外部に漏らさない
-- トークンは毎回再生成する
+- トークンは送信が必要と確定した場合のみ生成する（認証済み・再送インターバル内は生成しない）
 - メール送信は非同期で実行する（Outbox Pattern）
 
 ---
@@ -28,10 +28,15 @@
 - Method: `POST`
 - Path: `/api/v1/user-registration-requests`
 
-### 3.2 ユーザ本登録
+### 3.2 トークン状態確認
+
+- Method: `GET`
+- Path: `/api/v1/user-registrations/verify?token={token}`
+
+### 3.3 ユーザ本登録
 
 - Method: `POST`
-- Path: `/api/v1/user-registrations/verify`
+- Path: `/api/v1/user-registrations/verify?token={token}`
 
 ---
 
@@ -84,7 +89,7 @@ Accept-Language: ja
 ```json
 {
   "code": "USER_REGISTRATION_REQUEST_CREATED",
-  "message": "仮登録メールを送信しました。メールをご確認ください。",
+  "message": "仮登録メールを送信しました。メールをご確認ください",
   "expires_minutes": 60
 }
 ```
@@ -112,7 +117,7 @@ Accept-Language: ja
 ```json
 {
   "code": "BAD_REQUEST",
-  "message": "リクエストが不正です。"
+  "message": "リクエストが不正です"
 }
 ```
 
@@ -123,13 +128,19 @@ Accept-Language: ja
 ```json
 {
   "code": "VALIDATION_ERROR",
-  "message": "入力内容に誤りがあります。",
+  "message": "入力内容に誤りがあります",
   "errors": {
     "email": [
-      "メールアドレスを入力してください。"
+      {
+        "code": "EMAIL_REQUIRED",
+        "message": "メールアドレスを入力してください"
+      }
     ],
     "email_confirmation": [
-      "メールアドレスが一致しません。"
+      {
+        "code": "EMAIL_CONFIRMATION_NOT_MATCH",
+        "message": "メールアドレスが一致しません"
+      }
     ]
   }
 }
@@ -142,7 +153,7 @@ Accept-Language: ja
 ```json
 {
   "code": "TOO_MANY_REQUESTS",
-  "message": "リクエスト回数が上限を超えました。しばらく待ってから再試行してください。"
+  "message": "リクエストが多すぎます。しばらく待ってから再試行してください"
 }
 ```
 
@@ -153,7 +164,7 @@ Accept-Language: ja
 ```json
 {
   "code": "INTERNAL_SERVER_ERROR",
-  "message": "システムエラーが発生しました。"
+  "message": "システムエラーが発生しました"
 }
 ```
 
@@ -172,8 +183,8 @@ Accept-Language: ja
 
 #### エラーメッセージ
 
-- メールアドレスを入力してください。
-- 正しいメールアドレス形式で入力してください。
+- メールアドレスを入力してください
+- 正しいメールアドレス形式で入力してください
 
 ---
 
@@ -184,8 +195,8 @@ Accept-Language: ja
 
 #### エラーメッセージ
 
-- メールアドレスを入力してください。
-- メールアドレスが一致しません。
+- 確認用メールアドレスを入力してください
+- メールアドレスが一致しません
 
 ---
 
@@ -193,7 +204,7 @@ Accept-Language: ja
 
 ### 8.1 基本ルール
 
-- 常に新しいトークンを生成する
+- トークンは送信が必要と確定した場合のみ生成する（認証済み・再送インターバル内は生成しない）
 - 同一メールでもレスポンスは常に同一
 - 状態に応じてDBのみ更新する
 
@@ -213,6 +224,14 @@ Accept-Language: ja
 
 #### 8.3.1 未認証かつ有効期限内
 
+last_sent_at の状態により分岐する。
+
+**再送インターバル内の場合：**
+- DB更新は行わない
+- メール再送しない
+- そのまま201を返す（メールは送信されない）
+
+**再送インターバル経過後の場合：**
 - トークン再生成
 - token_hash 更新
 - expires_at 更新
@@ -235,13 +254,19 @@ Accept-Language: ja
 1. リクエスト受信
 2. サイズチェック
 3. JSONバインド
-4. バリデーション
-5. 仮登録確認
-6. トークン生成
-7. ハッシュ化
-8. DB保存（トランザクション）
-9. Outbox登録（メール）
-10. 201返却
+4. IPレートリミットチェック（Redis、5回/分）
+5. メールアドレス単位レートリミットチェック（Redis、1回/5分）
+6. バリデーション
+7. トランザクション開始
+   1. FindByEmailForUpdate（FOR UPDATE 排他ロック）
+   2. 認証済みチェック → 認証済みなら Outbox登録なしで即201返却
+   3. 再送インターバルチェック → インターバル内なら Outbox登録なしで即201返却
+   4. （送信必要と確定）トークン生成
+   5. ハッシュ化
+   6. URL生成
+   7. DB保存（新規 INSERT または UpdateToken）
+   8. Outbox登録（メール）
+8. 201返却
 
 ---
 
@@ -286,7 +311,7 @@ Accept-Language: ja
 ### 14.1 正常系
 
 - USER_REGISTRATION_REQUEST_CREATED
-  - 仮登録メールを送信しました。メールをご確認ください。
+  - 仮登録メールを送信しました。メールをご確認ください
 
 ---
 
@@ -354,11 +379,20 @@ Accept-Language: ja
 
 ---
 
-### 17.3 Request Body
+### 17.3 Request
+
+#### クエリパラメータ
+
+| 項目    | 型      | 必須 | 説明                         |
+|-------|--------|---:|----------------------------|
+| token | string |  ○ | 仮登録メールに記載されたトークン（平文）       |
+
+- 空の場合は即座に `400 INVALID_REGISTRATION_TOKEN` を返す（JSONバインドより前に評価する）
+
+#### Request Body
 
 ```json
 {
-  "token": "BvduupOZ9i1KuMzmH8Yx7chKgpJCjCFXy2SiVBvE2LU",
   "display_name": "テストユーザー",
   "password": "Password123!",
   "password_confirmation": "Password123!",
@@ -366,15 +400,14 @@ Accept-Language: ja
 }
 ```
 
-#### パラメータ定義
+#### ボディパラメータ定義
 
-| 項目                  | 型      | 必須 | 最大長 | 説明                     |
-|---------------------|--------|---:|------|------------------------|
-| token               | string |  ○ | 500  | 仮登録メールに記載されたトークン（平文）    |
-| display_name        | string |  ○ | 100  | 画面表示用ユーザ名               |
-| password            | string |  ○ | 255  | 設定するパスワード               |
-| password_confirmation | string |  ○ | 255  | パスワード確認用                |
-| agreed_to_terms     | bool   |  ○ | —    | 利用規約への同意（`true` のみ受け付け） |
+| 項目                    | 型      | 必須 | 最大長 | 説明                         |
+|-----------------------|--------|---:|------|----------------------------|
+| display_name          | string |  ○ | 100  | 画面表示用ユーザ名                  |
+| password              | string |  ○ | 255  | 設定するパスワード                  |
+| password_confirmation | string |  ○ | 255  | パスワード確認用                   |
+| agreed_to_terms       | bool   |  ○ | —    | 利用規約への同意（`true` のみ受け付け）    |
 
 ---
 
@@ -392,7 +425,7 @@ Accept-Language: ja
 ```json
 {
   "code": "USER_REGISTRATION_VERIFIED",
-  "message": "本登録が完了しました。"
+  "message": "本登録が完了しました"
 }
 ```
 
@@ -412,7 +445,7 @@ Accept-Language: ja
 ```json
 {
   "code": "INVALID_REGISTRATION_TOKEN",
-  "message": "トークンが不正です。"
+  "message": "トークンが不正です"
 }
 ```
 
@@ -424,18 +457,29 @@ Accept-Language: ja
 ```json
 {
   "code": "EXPIRED_REGISTRATION_TOKEN",
-  "message": "トークンの有効期限が切れています。"
+  "message": "トークンの有効期限が切れています"
 }
 ```
 
 - `expires_at < 現在時刻` の場合
+
+#### 400 Bad Request — リクエスト不正
+
+```json
+{
+  "code": "BAD_REQUEST",
+  "message": "リクエストが不正です"
+}
+```
+
+- JSONパース失敗、またはフィールドが最大長を超えた場合
 
 #### 409 Conflict — トークン使用済み
 
 ```json
 {
   "code": "USED_REGISTRATION_TOKEN",
-  "message": "既に登録が完了しています。"
+  "message": "既に登録が完了しています"
 }
 ```
 
@@ -446,7 +490,7 @@ Accept-Language: ja
 ```json
 {
   "code": "USER_ALREADY_REGISTERED",
-  "message": "入力されたメールアドレスは既に登録されています。"
+  "message": "入力されたメールアドレスは既に登録されています"
 }
 ```
 
@@ -457,12 +501,12 @@ Accept-Language: ja
 ```json
 {
   "code": "VALIDATION_ERROR",
-  "message": "入力内容に誤りがあります。",
+  "message": "入力内容に誤りがあります",
   "errors": {
-    "display_name": ["ユーザ名を入力してください。"],
-    "password": ["パスワードを入力してください。"],
-    "password_confirmation": ["パスワードが一致しません。"],
-    "agreed_to_terms": ["利用規約への同意が必要です。"]
+    "display_name": [{"code": "DISPLAY_NAME_REQUIRED", "message": "ユーザ名を入力してください"}],
+    "password": [{"code": "PASSWORD_REQUIRED", "message": "パスワードを入力してください"}],
+    "password_confirmation": [{"code": "PASSWORD_CONFIRMATION_NOT_MATCH", "message": "パスワードが一致しません"}],
+    "agreed_to_terms": [{"code": "AGREED_TO_TERMS_REQUIRED", "message": "利用規約への同意が必要です"}]
   }
 }
 ```
@@ -472,7 +516,7 @@ Accept-Language: ja
 ```json
 {
   "code": "TOO_MANY_REQUESTS",
-  "message": "リクエストが多すぎます。しばらく待ってから再度お試しください。"
+  "message": "リクエストが多すぎます。しばらく待ってから再試行してください"
 }
 ```
 
@@ -481,7 +525,7 @@ Accept-Language: ja
 ```json
 {
   "code": "INTERNAL_SERVER_ERROR",
-  "message": "システムエラーが発生しました。"
+  "message": "システムエラーが発生しました"
 }
 ```
 
@@ -489,13 +533,13 @@ Accept-Language: ja
 
 ### 17.7 バリデーション仕様
 
-| フィールド                | ルール                                          |
-|----------------------|----------------------------------------------|
-| token                | 空文字の場合は 400 を返す（バリデーションエラーとは区別）              |
-| display_name         | 必須。空白のみは不可（TrimSpace後に空文字チェック）               |
-| password             | 必須                                           |
-| password_confirmation | 必須。`password` と一致すること                        |
-| agreed_to_terms      | `true` であること                                 |
+| 項目                    | ルール                                           |
+|-----------------------|-----------------------------------------------|
+| token（クエリパラメータ）       | 空の場合は 400 を返す（JSONバインドより前に評価。バリデーションエラーとは区別） |
+| display_name          | 必須。空白のみは不可（TrimSpace後に空文字チェック）                |
+| password              | 必須。8文字以上、英字を1文字以上・数字を1文字以上含むこと               |
+| password_confirmation | 必須。`password` と一致すること                         |
+| agreed_to_terms       | `true` であること                                  |
 
 ---
 
@@ -511,6 +555,7 @@ Accept-Language: ja
 | VALIDATION_ERROR             | 422   | 入力値エラー                    |
 | DISPLAY_NAME_REQUIRED        | 422   | display_name 必須            |
 | PASSWORD_REQUIRED            | 422   | password 必須               |
+| PASSWORD_TOO_WEAK            | 422   | パスワード強度不足（8文字以上、英字・数字各1文字以上） |
 | PASSWORD_CONFIRMATION_REQUIRED | 422 | password_confirmation 必須  |
 | PASSWORD_CONFIRMATION_NOT_MATCH | 422 | パスワード不一致                 |
 | AGREED_TO_TERMS_REQUIRED     | 422   | 利用規約同意が必要                 |
@@ -529,21 +574,22 @@ Accept-Language: ja
 ### 17.10 処理フロー
 
 1. リクエスト受信（ボディサイズ制限 1MB）
-2. JSONバインド
-3. IPレートリミットチェック
-4. バリデーション（display_name / password / password_confirmation / agreed_to_terms）
-5. token の SHA-256 ハッシュ化
-6. password の bcrypt ハッシュ化
+2. クエリパラメータ `token` 取得（空なら即 400 INVALID_REGISTRATION_TOKEN）
+3. JSONバインド（display_name / password / password_confirmation / agreed_to_terms）
+4. IPレートリミットチェック
+5. バリデーション（display_name / password / password_confirmation / agreed_to_terms）
+6. token の SHA-256 ハッシュ化
 7. トランザクション開始
    1. `user_registration_requests` を `FOR UPDATE` で取得（排他ロック）
    2. レコード存在チェック（不正トークン）
    3. `verified_at` チェック（使用済み）
    4. `expires_at` チェック（期限切れ）
    5. `user_emails` 重複チェック
-   6. `users` INSERT
-   7. `user_emails` INSERT（is_primary=true, verified_at=now）
-   8. `user_credentials` INSERT（password_hash=bcrypt）
-   9. `user_registration_requests.verified_at` UPDATE
+   6. password の bcrypt ハッシュ化（DefaultCost）— 不正トークンでの bcrypt 実行による DoS を防ぐため、全検証後に実行
+   7. `users` INSERT
+   8. `user_emails` INSERT（is_primary=true, verified_at=now）
+   9. `user_credentials` INSERT（password_hash=bcrypt）
+   10. `user_registration_requests.verified_at` UPDATE
 8. 201 返却
 
 ---
@@ -556,3 +602,143 @@ Accept-Language: ja
 | user_emails | INSERT | id, user_id, email, is_primary=true, verified_at=now |
 | user_credentials | INSERT | user_id, password_hash, password_changed_at |
 | user_registration_requests | UPDATE | verified_at=now |
+
+---
+
+## 18. トークン状態確認API仕様（GET /api/v1/user-registrations/verify）
+
+### 18.1 概要
+
+本登録フォーム表示前にトークンの有効性を読み取り専用でチェックするAPI。  
+副作用なし（DB書き込み・トランザクション・bcrypt処理・FOR UPDATEロックなし）。
+
+---
+
+### 18.2 Headers
+
+```http
+Accept-Language: ja
+```
+
+- `Accept-Language` は `ja` / `en` に対応する。未指定または未対応言語の場合は `ja` にフォールバックする
+
+---
+
+### 18.3 Request
+
+#### クエリパラメータ
+
+| 項目    | 型      | 必須 | 説明                         |
+|-------|--------|---:|----------------------------|
+| token | string |  ○ | 仮登録メールに記載されたトークン（平文）       |
+
+- 空の場合は即座に `400 INVALID_REGISTRATION_TOKEN` を返す
+
+---
+
+### 18.4 リクエスト制限
+
+- 最大サイズ：1MB（全エンドポイント共通ミドルウェア）
+- レートリミット：IPアドレス単位 5回/分（環境変数 `RATE_LIMIT_IP_PER_MINUTE`、POST と共有）
+
+---
+
+### 18.5 正常レスポンス
+
+- Status Code: `200 OK`
+
+```json
+{
+  "code": "REGISTRATION_TOKEN_VALID",
+  "message": "本登録トークンは有効です"
+}
+```
+
+---
+
+### 18.6 エラーレスポンス
+
+#### 400 Bad Request — トークン不正
+
+```json
+{
+  "code": "INVALID_REGISTRATION_TOKEN",
+  "message": "トークンが不正です"
+}
+```
+
+- トークンが空の場合
+- SHA-256ハッシュが `user_registration_requests` に存在しない場合
+
+#### 400 Bad Request — トークン期限切れ
+
+```json
+{
+  "code": "EXPIRED_REGISTRATION_TOKEN",
+  "message": "トークンの有効期限が切れています"
+}
+```
+
+#### 409 Conflict — トークン使用済み
+
+```json
+{
+  "code": "USED_REGISTRATION_TOKEN",
+  "message": "既に登録が完了しています"
+}
+```
+
+#### 409 Conflict — メール登録済み
+
+```json
+{
+  "code": "USER_ALREADY_REGISTERED",
+  "message": "入力されたメールアドレスは既に登録されています"
+}
+```
+
+#### 429 Too Many Requests
+
+```json
+{
+  "code": "TOO_MANY_REQUESTS",
+  "message": "リクエストが多すぎます。しばらく待ってから再試行してください"
+}
+```
+
+#### 500 Internal Server Error
+
+```json
+{
+  "code": "INTERNAL_SERVER_ERROR",
+  "message": "システムエラーが発生しました"
+}
+```
+
+---
+
+### 18.7 エラーコード一覧（トークン確認API）
+
+| コード                         | HTTP | 説明                        |
+|------------------------------|------|---------------------------|
+| REGISTRATION_TOKEN_VALID     | 200  | トークン有効                    |
+| INVALID_REGISTRATION_TOKEN   | 400  | トークン不正または存在しない            |
+| EXPIRED_REGISTRATION_TOKEN   | 400  | トークン有効期限切れ                |
+| USED_REGISTRATION_TOKEN      | 409  | トークン使用済み（verified_at設定済み） |
+| USER_ALREADY_REGISTERED      | 409  | メールアドレス登録済み               |
+| TOO_MANY_REQUESTS            | 429  | レートリミット超過                 |
+| INTERNAL_SERVER_ERROR        | 500  | サーバ内部エラー                  |
+
+---
+
+### 18.8 処理フロー
+
+1. クエリパラメータ `token` 取得（空なら即 400 INVALID_REGISTRATION_TOKEN）
+2. IPレートリミットチェック（Redis、5回/分）
+3. token の SHA-256 ハッシュ化
+4. `user_registration_requests` を読み取り専用で取得（FOR UPDATEなし）
+5. レコード存在チェック（不正トークン）
+6. `verified_at IS NOT NULL` チェック（使用済み）
+7. `expires_at` チェック（期限切れ）
+8. `user_emails` 重複チェック（メール登録済み）
+9. 200 返却

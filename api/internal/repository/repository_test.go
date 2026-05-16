@@ -10,6 +10,7 @@ import (
 	"app-api/internal/model"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/lib/pq"
 )
 
 func TestNewUserRegistrationRequestRepository(t *testing.T) {
@@ -128,6 +129,162 @@ func TestUserRegistrationRequestRepositoryFindByEmailError(t *testing.T) {
 	_, err = repo.FindByEmail(context.Background(), "test@example.com")
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUserRegistrationRequestRepositoryFindByEmailForUpdate(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	mock.ExpectQuery(`SELECT[\s\S]+FOR UPDATE`).
+		WithArgs("test@example.com").
+		WillReturnRows(userRegistrationRequestRows(now))
+
+	repo := NewUserRegistrationRequestRepository(db)
+
+	entity, err := repo.FindByEmailForUpdate(context.Background(), "test@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if entity == nil {
+		t.Fatal("entity is nil")
+	}
+
+	if entity.Email != "test@example.com" {
+		t.Fatalf("unexpected email: %s", entity.Email)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUserRegistrationRequestRepositoryFindByEmailForUpdateNoRows(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectQuery(`SELECT[\s\S]+FOR UPDATE`).
+		WithArgs("none@example.com").
+		WillReturnError(sql.ErrNoRows)
+
+	repo := NewUserRegistrationRequestRepository(db)
+
+	entity, err := repo.FindByEmailForUpdate(context.Background(), "none@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if entity != nil {
+		t.Fatal("entity should be nil")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUserRegistrationRequestRepositoryFindByEmailForUpdateError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	expectedErr := errors.New("select failed")
+
+	mock.ExpectQuery(`SELECT[\s\S]+FOR UPDATE`).
+		WithArgs("test@example.com").
+		WillReturnError(expectedErr)
+
+	repo := NewUserRegistrationRequestRepository(db)
+
+	_, err = repo.FindByEmailForUpdate(context.Background(), "test@example.com")
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUserRegistrationRequestRepositoryCreate_DuplicateEmail(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	mock.ExpectExec("INSERT INTO user_registration_requests").
+		WithArgs("id", "test@example.com", "token-hash", now, nil, sqlmock.AnyArg(), now).
+		WillReturnError(&pq.Error{Code: "23505", Constraint: "uq_user_registration_requests_email"})
+
+	repo := NewUserRegistrationRequestRepository(db)
+
+	err = repo.Create(context.Background(), &model.UserRegistrationRequest{
+		ID:         "id",
+		Email:      "test@example.com",
+		TokenHash:  "token-hash",
+		ExpiresAt:  now,
+		VerifiedAt: nil,
+		LastSentAt: &now,
+		CreatedAt:  now,
+	})
+	if !errors.Is(err, ErrDuplicateEmail) {
+		t.Fatalf("expected ErrDuplicateEmail, got %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUserRegistrationRequestRepositoryCreate_DuplicateTokenHash(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	pqErr := &pq.Error{Code: "23505", Constraint: "uq_user_registration_requests_token_hash"}
+	mock.ExpectExec("INSERT INTO user_registration_requests").
+		WithArgs("id", "test@example.com", "token-hash", now, nil, sqlmock.AnyArg(), now).
+		WillReturnError(pqErr)
+
+	repo := NewUserRegistrationRequestRepository(db)
+
+	err = repo.Create(context.Background(), &model.UserRegistrationRequest{
+		ID:         "id",
+		Email:      "test@example.com",
+		TokenHash:  "token-hash",
+		ExpiresAt:  now,
+		VerifiedAt: nil,
+		LastSentAt: &now,
+		CreatedAt:  now,
+	})
+	if errors.Is(err, ErrDuplicateEmail) {
+		t.Fatal("token_hash unique violation must not be treated as ErrDuplicateEmail")
+	}
+	var gotPq *pq.Error
+	if !errors.As(err, &gotPq) {
+		t.Fatalf("expected pq.Error, got %T: %v", err, err)
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -503,7 +660,7 @@ func TestUserRegistrationRequestRepositoryFindByTokenHashForUpdate(t *testing.T)
 
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
-	mock.ExpectQuery("SELECT").
+	mock.ExpectQuery(`SELECT[\s\S]+FOR UPDATE`).
 		WithArgs("token-hash").
 		WillReturnRows(userRegistrationRequestRows(now))
 
@@ -534,7 +691,7 @@ func TestUserRegistrationRequestRepositoryFindByTokenHashForUpdateNoRows(t *test
 	}
 	defer func() { _ = db.Close() }()
 
-	mock.ExpectQuery("SELECT").
+	mock.ExpectQuery(`SELECT[\s\S]+FOR UPDATE`).
 		WithArgs("none").
 		WillReturnError(sql.ErrNoRows)
 
@@ -563,7 +720,7 @@ func TestUserRegistrationRequestRepositoryFindByTokenHashForUpdateError(t *testi
 
 	expectedErr := errors.New("select failed")
 
-	mock.ExpectQuery("SELECT").
+	mock.ExpectQuery(`SELECT[\s\S]+FOR UPDATE`).
 		WithArgs("token-hash").
 		WillReturnError(expectedErr)
 

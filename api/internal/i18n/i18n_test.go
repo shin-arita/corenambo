@@ -51,9 +51,11 @@ func TestTranslateVerifyCodesJA(t *testing.T) {
 		CodeUsedRegistrationToken,
 		CodeDisplayNameRequired,
 		CodePasswordRequired,
+		CodePasswordTooWeak,
 		CodePasswordConfirmationRequired,
 		CodePasswordConfirmationNotMatch,
 		CodeAgreedToTermsRequired,
+		CodeTooManyRequests,
 	}
 	for _, code := range codes {
 		msg := tl.Translate("ja", code)
@@ -72,9 +74,11 @@ func TestTranslateVerifyCodesEN(t *testing.T) {
 		CodeUsedRegistrationToken,
 		CodeDisplayNameRequired,
 		CodePasswordRequired,
+		CodePasswordTooWeak,
 		CodePasswordConfirmationRequired,
 		CodePasswordConfirmationNotMatch,
 		CodeAgreedToTermsRequired,
+		CodeTooManyRequests,
 	}
 	for _, code := range codes {
 		msg := tl.Translate("en", code)

@@ -9,6 +9,7 @@ import (
 	"app-api/internal/app"
 	"app-api/internal/config"
 	"app-api/internal/logger"
+	"app-api/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
@@ -42,7 +43,11 @@ func main() {
 	userRegistrationHandler := app.NewUserRegistrationHandler(db, cfg)
 
 	router := gin.New()
-	router.Use(gin.Logger())
+	// X-Forwarded-For spoof対策: 直接露出構成のためプロキシを信頼しない
+	if err := router.SetTrustedProxies(nil); err != nil {
+		panic(err)
+	}
+	router.Use(middleware.LoggerWithTokenMask())
 	router.Use(corsMiddleware(serverCfg.GetCORSAllowOrigin()))
 
 	// requestサイズ制限: 1MB
@@ -66,6 +71,7 @@ func main() {
 	}))
 
 	router.POST("/api/v1/user-registration-requests", userRegistrationHandler.Create)
+	router.GET("/api/v1/user-registrations/verify", userRegistrationHandler.CheckToken)
 	router.POST("/api/v1/user-registrations/verify", userRegistrationHandler.Verify)
 
 	logger.Info("msg=server started port=%s", serverCfg.GetPort())

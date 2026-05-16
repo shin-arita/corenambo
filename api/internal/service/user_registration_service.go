@@ -7,6 +7,7 @@ import (
 	"net/mail"
 	"strings"
 	"time"
+	"unicode"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -36,6 +37,7 @@ var hashPassword = func(password string) (string, error) {
 type UserRegistrationService interface {
 	Create(ctx context.Context, input CreateUserRegistrationInput) (*CreateUserRegistrationOutput, error)
 	Verify(ctx context.Context, input VerifyUserRegistrationInput) (*VerifyUserRegistrationOutput, error)
+	CheckToken(ctx context.Context, input CheckTokenInput) (*CheckTokenOutput, error)
 }
 
 type CreateUserRegistrationInput struct {
@@ -47,6 +49,14 @@ type CreateUserRegistrationInput struct {
 type CreateUserRegistrationOutput struct {
 	Code           string
 	ExpiresMinutes int
+}
+
+type CheckTokenInput struct {
+	Token string
+}
+
+type CheckTokenOutput struct {
+	Code string
 }
 
 type VerifyUserRegistrationInput struct {
@@ -139,6 +149,23 @@ func validateCreateInput(input CreateUserRegistrationInput) error {
 	return nil
 }
 
+func isStrongPassword(password string) bool {
+	if len(password) < 8 {
+		return false
+	}
+	hasLetter := false
+	hasDigit := false
+	for _, r := range password {
+		if unicode.IsLetter(r) {
+			hasLetter = true
+		}
+		if unicode.IsDigit(r) {
+			hasDigit = true
+		}
+	}
+	return hasLetter && hasDigit
+}
+
 func validateVerifyInput(input VerifyUserRegistrationInput) error {
 	fieldErrors := map[string][]app_error.FieldError{}
 
@@ -152,6 +179,10 @@ func validateVerifyInput(input VerifyUserRegistrationInput) error {
 	if input.Password == "" {
 		fieldErrors["password"] = append(fieldErrors["password"], app_error.FieldError{
 			Code: i18n.CodePasswordRequired,
+		})
+	} else if !isStrongPassword(input.Password) {
+		fieldErrors["password"] = append(fieldErrors["password"], app_error.FieldError{
+			Code: i18n.CodePasswordTooWeak,
 		})
 	}
 
@@ -192,50 +223,47 @@ func (s *userRegistrationService) Create(
 
 	now := s.clock.Now()
 
-	req, err := s.userRegistrationRequestRepo.FindByEmail(ctx, input.Email)
-	if err != nil {
-		return nil, err
-	}
-
-	if req != nil && req.VerifiedAt != nil {
-		return &CreateUserRegistrationOutput{
-			Code:           i18n.CodeUserRegistrationRequestCreated,
-			ExpiresMinutes: s.config.RegistrationTokenExpiresMinutes(),
-		}, nil
-	}
-
-	if req != nil && req.LastSentAt != nil {
-		resendAvailableAt := req.LastSentAt.Add(
-			time.Duration(s.config.RegistrationResendIntervalMinutes()) * time.Minute,
-		)
-		if now.Before(resendAvailableAt) {
-			return &CreateUserRegistrationOutput{
-				Code:           i18n.CodeUserRegistrationRequestCreated,
-				ExpiresMinutes: s.config.RegistrationTokenExpiresMinutes(),
-			}, nil
+	err := s.txManager.WithinTransaction(ctx, func(txCtx context.Context) error {
+		// FOR UPDATE でロック取得し、concurrent再送による二重メール送信を防ぐ
+		req, err := s.userRegistrationRequestRepo.FindByEmailForUpdate(txCtx, input.Email)
+		if err != nil {
+			return err
 		}
-	}
 
-	plainToken, err := s.tokenGenerator.Generate()
-	if err != nil {
-		return nil, err
-	}
-	if plainToken == "" {
-		return nil, errors.New("token generator returned empty token")
-	}
+		// 認証済みの場合はそのまま成功を返す
+		if req != nil && req.VerifiedAt != nil {
+			return nil
+		}
 
-	tokenHash, err := s.tokenHasher.Hash(plainToken)
-	if err != nil {
-		return nil, err
-	}
+		// 再送インターバル内の場合はそのまま成功を返す
+		if req != nil && req.LastSentAt != nil {
+			resendAvailableAt := req.LastSentAt.Add(
+				time.Duration(s.config.RegistrationResendIntervalMinutes()) * time.Minute,
+			)
+			if now.Before(resendAvailableAt) {
+				return nil
+			}
+		}
 
-	expiresAt := now.Add(
-		time.Duration(s.config.RegistrationTokenExpiresMinutes()) * time.Minute,
-	)
+		// 送信が必要と確定してからトークン材料を生成（純粋な計算処理）
+		plainToken, err := s.tokenGenerator.Generate()
+		if err != nil {
+			return err
+		}
+		if plainToken == "" {
+			return errors.New("token generator returned empty token")
+		}
 
-	registrationURL := s.registrationURLBuilder.Build(plainToken)
+		tokenHash, err := s.tokenHasher.Hash(plainToken)
+		if err != nil {
+			return err
+		}
 
-	err = s.txManager.WithinTransaction(ctx, func(txCtx context.Context) error {
+		expiresAt := now.Add(
+			time.Duration(s.config.RegistrationTokenExpiresMinutes()) * time.Minute,
+		)
+
+		registrationURL := s.registrationURLBuilder.Build(plainToken)
 
 		if req == nil {
 			id, err := s.uuidGenerator.NewV7()
@@ -254,6 +282,10 @@ func (s *userRegistrationService) Create(
 			}
 
 			if err := s.userRegistrationRequestRepo.Create(txCtx, newReq); err != nil {
+				// concurrent INSERTによるuniqueviolationは成功として扱う
+				if errors.Is(err, repository.ErrDuplicateEmail) {
+					return nil
+				}
 				return err
 			}
 		} else {
@@ -323,11 +355,6 @@ func (s *userRegistrationService) Verify(
 		return nil, app_error.WrapInternal(err)
 	}
 
-	passwordHash, err := hashPassword(input.Password)
-	if err != nil {
-		return nil, app_error.WrapInternal(err)
-	}
-
 	now := s.clock.Now()
 
 	err = s.txManager.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -354,6 +381,12 @@ func (s *userRegistrationService) Verify(
 		}
 		if existing != nil {
 			return app_error.NewConflict(i18n.CodeUserAlreadyRegistered)
+		}
+
+		// token有効確認後にbcryptを実行（無効token大量投入によるCPU負荷を防ぐ）
+		passwordHash, err := hashPassword(input.Password)
+		if err != nil {
+			return app_error.WrapInternal(err)
 		}
 
 		userID, err := s.uuidGenerator.NewV7()
@@ -408,4 +441,48 @@ func (s *userRegistrationService) Verify(
 	return &VerifyUserRegistrationOutput{
 		Code: i18n.CodeUserRegistrationVerified,
 	}, nil
+}
+
+func (s *userRegistrationService) CheckToken(
+	ctx context.Context,
+	input CheckTokenInput,
+) (*CheckTokenOutput, error) {
+
+	if input.Token == "" {
+		return nil, app_error.NewBadRequest(i18n.CodeInvalidRegistrationToken)
+	}
+
+	tokenHash, err := s.tokenHasher.Hash(input.Token)
+	if err != nil {
+		return nil, app_error.WrapInternal(err)
+	}
+
+	now := s.clock.Now()
+
+	req, err := s.userRegistrationRequestRepo.FindByTokenHash(ctx, tokenHash)
+	if err != nil {
+		return nil, err
+	}
+
+	if req == nil {
+		return nil, app_error.NewBadRequest(i18n.CodeInvalidRegistrationToken)
+	}
+
+	if req.VerifiedAt != nil {
+		return nil, app_error.NewConflict(i18n.CodeUsedRegistrationToken)
+	}
+
+	if now.After(req.ExpiresAt) {
+		return nil, app_error.NewBadRequest(i18n.CodeExpiredRegistrationToken)
+	}
+
+	existing, err := s.userEmailRepo.FindByEmail(ctx, req.Email)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return nil, app_error.NewConflict(i18n.CodeUserAlreadyRegistered)
+	}
+
+	return &CheckTokenOutput{Code: i18n.CodeRegistrationTokenValid}, nil
 }

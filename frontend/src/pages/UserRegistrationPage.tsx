@@ -4,16 +4,33 @@ import { Link, useNavigate } from "react-router-dom";
 /* c8 ignore next */
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
-function validateEmail(value) {
+function validateEmail(value: string): string | null {
   if (!value.trim()) return "メールアドレスを入力してください";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return "正しいメールアドレス形式で入力してください";
   return null;
 }
 
-function validateEmailConfirmation(email, confirmation) {
+function validateEmailConfirmation(email: string, confirmation: string): string | null {
   if (!confirmation.trim()) return "メールアドレス（確認）を入力してください";
   if (email.trim() !== confirmation.trim()) return "確認用メールアドレスが一致しません";
   return null;
+}
+
+interface FieldErrors {
+  email?: string;
+  emailConfirmation?: string;
+}
+
+interface ApiValidationErrors {
+  email?: Array<{ message: string }>;
+  email_confirmation?: Array<{ message: string }>;
+}
+
+interface ApiResponse {
+  code?: string;
+  message?: string;
+  expires_minutes?: number;
+  errors?: ApiValidationErrors;
 }
 
 export default function UserRegistrationPage() {
@@ -21,14 +38,14 @@ export default function UserRegistrationPage() {
 
   const [email, setEmail] = useState("");
   const [emailConfirmation, setEmailConfirmation] = useState("");
-  const [errors, setErrors] = useState({});
-  const [formError, setFormError] = useState(null);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleSubmit(event) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const newErrors = {};
+    const newErrors: FieldErrors = {};
     const emailError = validateEmail(email);
     if (emailError) newErrors.email = emailError;
 
@@ -54,7 +71,7 @@ export default function UserRegistrationPage() {
         }),
       });
 
-      const data = await response.json();
+      const data: ApiResponse = await response.json();
 
       if (response.ok) {
         navigate("/registration/complete", {
@@ -64,7 +81,7 @@ export default function UserRegistrationPage() {
       }
 
       if (data.code === "VALIDATION_ERROR" && data.errors) {
-        const apiErrors = {};
+        const apiErrors: FieldErrors = {};
         if (data.errors.email?.[0]) apiErrors.email = data.errors.email[0].message;
         if (data.errors.email_confirmation?.[0]) apiErrors.emailConfirmation = data.errors.email_confirmation[0].message;
         if (Object.keys(apiErrors).length > 0) {
@@ -73,9 +90,9 @@ export default function UserRegistrationPage() {
         }
       }
 
-      setFormError(data.message ?? "エラーが発生しました。しばらく経ってから再度お試しください。");
+      setFormError(data.message ?? "エラーが発生しました。しばらく経ってから再度お試しください");
     } catch {
-      setFormError("通信エラーが発生しました。しばらく経ってから再度お試しください。");
+      setFormError("通信エラーが発生しました。しばらく経ってから再度お試しください");
     } finally {
       setSubmitting(false);
     }
@@ -93,7 +110,7 @@ export default function UserRegistrationPage() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-8 py-10">
           <h1 className="text-xl font-bold text-slate-900 mb-2">仮会員登録</h1>
           <p className="text-sm text-slate-500 mb-8">
-            メールアドレスを入力すると、本登録用のリンクをお送りします。
+            メールアドレスを入力すると、本登録用のリンクをお送りします
           </p>
 
           {formError && (
@@ -163,7 +180,7 @@ export default function UserRegistrationPage() {
             <Link to="/terms" className="text-blue-600 hover:underline">利用規約</Link>
             および
             <Link to="/privacy" className="text-blue-600 hover:underline">プライバシーポリシー</Link>
-            に同意したものとみなします。
+            に同意したものとみなします
           </p>
 
           <p className="mt-4 text-sm text-center text-slate-500">

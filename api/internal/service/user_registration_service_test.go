@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"app-api/internal/token"
 )
 
 // ──── Helpers ────
@@ -411,6 +413,33 @@ func TestCreate_OutboxNextAttemptAtIsNow(t *testing.T) {
 	}
 }
 
+func TestCreate_TokenHashRoundTrip(t *testing.T) {
+	repo := &captureCreateUserRegistrationRepo{}
+	builder := &captureURLBuilder{}
+	svc := newTestUserRegistrationServiceWithRealHasherAndCapture(repo, builder)
+
+	_, err := svc.Create(context.Background(), CreateUserRegistrationInput{
+		Email:             "test@example.com",
+		EmailConfirmation: "test@example.com",
+		Language:          "ja",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// builder.capturedToken はメールURLに埋め込まれた平文token
+	// repo.capturedTokenHash はDBに保存されたhash
+	// SHA256(url_token) == stored_token_hash であることを検証
+	hasher := token.SHA256Hasher{}
+	wantHash, err := hasher.Hash(builder.capturedToken)
+	if err != nil {
+		t.Fatalf("failed to hash URL token: %v", err)
+	}
+	if wantHash != repo.capturedTokenHash {
+		t.Fatalf("token hash mismatch: SHA256(url_token)=%q stored_hash=%q", wantHash, repo.capturedTokenHash)
+	}
+}
+
 // ──── Verify validation tests ────
 
 func TestVerify_Validation_DisplayNameRequired(t *testing.T) {
@@ -461,6 +490,53 @@ func TestVerify_Validation_PasswordConfirmationNotMatch(t *testing.T) {
 	_, err := svc.Verify(context.Background(), in)
 	if err == nil {
 		t.Fatal("expected validation error")
+	}
+}
+
+func TestVerify_Validation_PasswordTooShort(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.Password = "pass123"
+	in.PasswordConfirmation = "pass123"
+	_, err := svc.Verify(context.Background(), in)
+	if err == nil {
+		t.Fatal("expected validation error for short password")
+	}
+}
+
+func TestVerify_Validation_PasswordNoLetter(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.Password = "12345678"
+	in.PasswordConfirmation = "12345678"
+	_, err := svc.Verify(context.Background(), in)
+	if err == nil {
+		t.Fatal("expected validation error for password with no letter")
+	}
+}
+
+func TestVerify_Validation_PasswordNoDigit(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.Password = "password"
+	in.PasswordConfirmation = "password"
+	_, err := svc.Verify(context.Background(), in)
+	if err == nil {
+		t.Fatal("expected validation error for password with no digit")
+	}
+}
+
+func TestVerify_Validation_PasswordMinLength(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.Password = "passw0rd"
+	in.PasswordConfirmation = "passw0rd"
+	out, err := svc.Verify(context.Background(), in)
+	if err != nil {
+		t.Fatalf("unexpected error for 8-char valid password: %v", err)
+	}
+	if out.Code == "" {
+		t.Fatal("expected non-empty code")
 	}
 }
 
@@ -724,6 +800,72 @@ func TestVerify_DisplayNameTrimmed(t *testing.T) {
 	}
 }
 
+func TestCreate_AlreadyVerified_IgnoresTokenGenError(t *testing.T) {
+	svc := newTestUserRegistrationServiceWithVerifiedUserAndTokenGenError()
+	out, err := svc.Create(context.Background(), CreateUserRegistrationInput{
+		Email:             "test@example.com",
+		EmailConfirmation: "test@example.com",
+		Language:          "ja",
+	})
+	if err != nil {
+		t.Fatalf("already-verified user must succeed even if token gen would fail, got: %v", err)
+	}
+	if out.ExpiresMinutes != 60 {
+		t.Fatalf("expected ExpiresMinutes=60, got %d", out.ExpiresMinutes)
+	}
+}
+
+func TestCreate_ResendNotAvailable_IgnoresTokenGenError(t *testing.T) {
+	svc := newTestUserRegistrationServiceWithRecentlySentUserAndTokenGenError()
+	out, err := svc.Create(context.Background(), CreateUserRegistrationInput{
+		Email:             "test@example.com",
+		EmailConfirmation: "test@example.com",
+		Language:          "ja",
+	})
+	if err != nil {
+		t.Fatalf("recently-sent user must succeed even if token gen would fail, got: %v", err)
+	}
+	if out.ExpiresMinutes != 60 {
+		t.Fatalf("expected ExpiresMinutes=60, got %d", out.ExpiresMinutes)
+	}
+}
+
+func TestCreate_ConcurrentDuplicateEmail(t *testing.T) {
+	svc := newTestUserRegistrationServiceWithDuplicateEmailRepo()
+	out, err := svc.Create(context.Background(), CreateUserRegistrationInput{
+		Email:             "test@example.com",
+		EmailConfirmation: "test@example.com",
+		Language:          "ja",
+	})
+	if err != nil {
+		t.Fatalf("expected success on concurrent duplicate email, got: %v", err)
+	}
+	if out.ExpiresMinutes != 60 {
+		t.Fatalf("expected ExpiresMinutes=60, got %d", out.ExpiresMinutes)
+	}
+}
+
+func TestVerify_BcryptSkippedForInvalidToken(t *testing.T) {
+	called := false
+	orig := bcryptGenerate
+	bcryptGenerate = func(_ []byte, _ int) ([]byte, error) {
+		called = true
+		return []byte("hash"), nil
+	}
+	t.Cleanup(func() { bcryptGenerate = orig })
+
+	svc := newVerifyService(
+		&tokenNotFoundUserRegRepo{},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
+	)
+	_, _ = svc.Verify(context.Background(), validVerifyInput)
+	if called {
+		t.Fatal("bcrypt was called even though token was not found — CPU DoS vector open")
+	}
+}
+
 func TestHashPasswordBcryptError(t *testing.T) {
 	orig := bcryptGenerate
 	bcryptGenerate = func(_ []byte, _ int) ([]byte, error) {
@@ -734,5 +876,141 @@ func TestHashPasswordBcryptError(t *testing.T) {
 	_, err := hashPassword("test")
 	if err == nil {
 		t.Fatal("expected error from bcrypt")
+	}
+}
+
+// ──── CheckToken tests ────
+
+func TestCheckToken_Valid(t *testing.T) {
+	future := time.Now().Add(60 * time.Minute)
+	svc := newCheckTokenService(
+		&checkTokenFoundRepo{expiresAt: future},
+		&dummyUserEmailRepo{},
+	)
+
+	out, err := svc.CheckToken(context.Background(), CheckTokenInput{Token: "token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Code != "REGISTRATION_TOKEN_VALID" {
+		t.Fatalf("expected REGISTRATION_TOKEN_VALID, got %s", out.Code)
+	}
+}
+
+func TestCheckToken_EmptyToken(t *testing.T) {
+	svc := newCheckTokenService(&checkTokenFoundRepo{}, &dummyUserEmailRepo{})
+
+	_, err := svc.CheckToken(context.Background(), CheckTokenInput{Token: ""})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestCheckToken_TokenNotFound(t *testing.T) {
+	svc := newCheckTokenService(&checkTokenNotFoundRepo{}, &dummyUserEmailRepo{})
+
+	_, err := svc.CheckToken(context.Background(), CheckTokenInput{Token: "token"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestCheckToken_TokenExpired(t *testing.T) {
+	past := time.Now().Add(-2 * time.Hour)
+	svc := newCheckTokenService(
+		&checkTokenFoundRepo{expiresAt: past},
+		&dummyUserEmailRepo{},
+	)
+
+	_, err := svc.CheckToken(context.Background(), CheckTokenInput{Token: "token"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestCheckToken_TokenUsed(t *testing.T) {
+	future := time.Now().Add(60 * time.Minute)
+	now := time.Now()
+	svc := newCheckTokenService(
+		&checkTokenFoundRepo{expiresAt: future, verifiedAt: &now},
+		&dummyUserEmailRepo{},
+	)
+
+	_, err := svc.CheckToken(context.Background(), CheckTokenInput{Token: "token"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestCheckToken_UserAlreadyRegistered(t *testing.T) {
+	future := time.Now().Add(60 * time.Minute)
+	svc := newCheckTokenService(
+		&checkTokenFoundRepo{expiresAt: future},
+		&dummyExistingEmailRepo{},
+	)
+
+	_, err := svc.CheckToken(context.Background(), CheckTokenInput{Token: "token"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestCheckToken_DBError(t *testing.T) {
+	svc := newCheckTokenService(&checkTokenFindErrorRepo{}, &dummyUserEmailRepo{})
+
+	_, err := svc.CheckToken(context.Background(), CheckTokenInput{Token: "token"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestCheckToken_HashError(t *testing.T) {
+	future := time.Now().Add(60 * time.Minute)
+	svc := NewUserRegistrationService(
+		&checkTokenFoundRepo{expiresAt: future},
+		&dummyUserModelRepo{},
+		&dummyUserEmailRepo{},
+		&dummyUserCredentialRepo{},
+		&dummyOutboxRepo{},
+		&dummyTx{},
+		dummyTokenGen{},
+		dummyErrorTokenHasher{},
+		dummyUUID{},
+		dummyClock{},
+		dummyURL{},
+		dummyConfig{},
+	)
+
+	_, err := svc.CheckToken(context.Background(), CheckTokenInput{Token: "token"})
+	if err == nil {
+		t.Fatal("expected error from hash")
+	}
+}
+
+func TestCheckToken_EmailFindError(t *testing.T) {
+	future := time.Now().Add(60 * time.Minute)
+	svc := newCheckTokenService(
+		&checkTokenFoundRepo{expiresAt: future},
+		&dummyErrorFindEmailRepo{},
+	)
+
+	_, err := svc.CheckToken(context.Background(), CheckTokenInput{Token: "token"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestCheckToken_VerifiedBeforeExpired(t *testing.T) {
+	past := time.Now().Add(-2 * time.Hour)
+	now := time.Now()
+	// verified_at あり + 期限切れ → verified_at チェックが先に検出される
+	svc := newCheckTokenService(
+		&checkTokenFoundRepo{expiresAt: past, verifiedAt: &now},
+		&dummyUserEmailRepo{},
+	)
+
+	_, err := svc.CheckToken(context.Background(), CheckTokenInput{Token: "token"})
+	if err == nil {
+		t.Fatal("expected error")
 	}
 }

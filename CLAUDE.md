@@ -15,7 +15,7 @@
 
 | 領域 | 技術 |
 |------|------|
-| Frontend | React + Vite |
+| Frontend | React + Vite + TypeScript |
 | Backend | Go + Gin |
 | DB | PostgreSQL + PGroonga |
 | Cache / Rate Limit | Redis |
@@ -55,30 +55,36 @@
 
 **必須事項（完了条件）**
 
-- 1機能ずつ進める
 - 実装後にテストコード作成・更新
 - カバレッジ100%達成
 - lint / test 全通過
 - ユーザの最終動作確認完了
+- フロントエンドは長期運用前提で TypeScript + TSX に統一する
+- 既存 JSX は段階的に TSX へ移行する
+- TSX移行は1ファイルずつ行い、各ステップで lint / test を通す
 
 ---
 
 ## Quality Gate
 
 **Backend（必須）**
+
 ```bash
-docker compose exec api go fmt ./...
+docker compose exec api gofmt -w internal cmd
 docker compose exec api golangci-lint run
 docker compose exec api go test ./... -cover
 ```
 
 **Frontend（必須）**
+
 ```bash
+docker compose exec frontend npx eslint src --fix
 docker compose exec frontend npm run lint
-docker compose exec frontend npm run test -- --coverage
+docker compose exec frontend npm run test
 ```
 
 **latest混入チェック（必須）**
+
 ```bash
 grep -RIn --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=vendor "latest\|@latest" .
 ```
@@ -103,4 +109,5 @@ docs/ai/
 ## Naming
 
 正式名称：**コレナンボ・オークション**
+
 「コレナンボ」と省略しない。

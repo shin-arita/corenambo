@@ -59,7 +59,7 @@
 
 ## 3. 仮登録API（ハンドラ層）
 
-**ファイル:** `api/internal/handler/handler_test.go`（13件）
+**ファイル:** `api/internal/handler/handler_test.go`（27件）
 
 | # | テスト名 | 検証内容 |
 |---|---------|---------|
@@ -70,16 +70,28 @@
 | 5 | TestUserRegistrationHandlerCreateValidationError | バリデーションエラー→422 |
 | 6 | TestUserRegistrationHandlerCreateConflict | 競合→409 |
 | 7 | TestUserRegistrationHandlerCreateInternalError | 内部エラー→500 |
-| 8 | TestUserRegistrationHandlerCreateRateLimitIP | IPレート制限→429 |
-| 9 | TestUserRegistrationHandlerCreateRateLimitEmail | メールレート制限→429 |
+| 8 | TestUserRegistrationHandlerCreateRateLimitIP | IPレート制限→429（code=TOO_MANY_REQUESTS確認） |
+| 9 | TestUserRegistrationHandlerCreateRateLimitEmail | メールレート制限→429（code=TOO_MANY_REQUESTS確認） |
 | 10 | TestToResponse | CreateUserRegistrationOutput→HTTPレスポンス変換 |
 | 11 | TestUserRegistrationHandlerCreateEnglishLanguage | `Accept-Language: en`→英語 |
 | 12 | TestUserRegistrationHandlerCreateSuccessResponseBody | レスポンスボディに `expires_minutes` 含む |
-| 13 | TestNormalizeLanguage | 言語コード正規化（ja-JP→ja, en-US→en等） |
+| 13 | TestUserRegistrationHandlerCreateBodyUnderSizeLimit | 1MB未満→受け付ける |
+| 14 | TestUserRegistrationHandlerCreateBodyExceedsSizeLimit | 1MB超→400 |
+| 15 | TestUserRegistrationHandlerVerifySuccess | 正常系→201（クエリtokenがserviceに渡されることも検証） |
+| 16 | TestUserRegistrationHandlerVerifyMissingQueryToken | クエリtokenなし→400 INVALID_REGISTRATION_TOKEN ✅ |
+| 17 | TestUserRegistrationHandlerVerifyBadRequest | JSONパースエラー→400 |
+| 18 | TestUserRegistrationHandlerVerifyTokenInvalid | 不正トークン→400 |
+| 19 | TestUserRegistrationHandlerVerifyTokenExpired | 期限切れトークン→400 |
+| 20 | TestUserRegistrationHandlerVerifyAlreadyVerified | トークン使用済み→409 |
+| 21 | TestUserRegistrationHandlerVerifyUserAlreadyRegistered | メール重複→409 |
+| 22 | TestUserRegistrationHandlerVerifyValidationError | バリデーションエラー→422 |
+| 23 | TestUserRegistrationHandlerVerifyInternalError | 内部エラー→500 |
+| 24 | TestUserRegistrationHandlerVerifyRateLimitIP | IPレート制限→429（code=TOO_MANY_REQUESTS確認） |
+| 25 | TestUserRegistrationHandlerVerifyBodyExceedsSizeLimit | 1MB超→400 |
+| 26 | TestUserRegistrationHandlerVerifyDefaultLanguage | `Accept-Language`なし→デフォルトja |
+| 27 | TestNormalizeLanguage | 言語コード正規化（ja-JP→ja, en-US→en等） |
 
-**不足している観点:**
-- `Content-Type: application/json` のバリデーション
-- 極端に大きなリクエストボディの拒否（ミドルウェア層の確認）
+**不足している観点:** なし
 
 ---
 
@@ -130,7 +142,7 @@
 
 ## 7. サービス層（token hash保存・mail_outbox payload）
 
-**ファイル:** `api/internal/service/user_registration_service_test.go`（23件）
+**ファイル:** `api/internal/service/user_registration_service_test.go`（57件）
 
 | # | テスト名 | 検証内容 |
 |---|---------|---------|
@@ -156,12 +168,43 @@
 | 20 | TestCreate_OutboxPayloadContainsTokenURL | outboxペイロードURLに生トークン含む ✅ |
 | 21 | TestCreate_OutboxPayloadURLNotEmptyToken | outboxペイロードURLが `token=` で終わらない ✅ |
 | 22 | TestCreate_EmptyTokenFails | 空トークン→エラー ✅ |
-| 23 | TestVerify | Verify未実装→エラー |
+| 23 | TestCreate_OutboxMailTypeIsUserRegistration | outbox.mail_type = "user_registration" ✅ |
+| 24 | TestCreate_OutboxStatusIsPending | outbox.status = "pending" ✅ |
+| 25 | TestCreate_OutboxNextAttemptAtIsNow | outbox.next_attempt_at = 現在時刻 ✅ |
+| 26 | TestCreate_AlreadyVerified_IgnoresTokenGenError | 認証済みユーザ→トークン生成エラーでも正常返却 ✅ |
+| 27 | TestCreate_ResendNotAvailable_IgnoresTokenGenError | 再送間隔内→トークン生成エラーでも正常返却 ✅ |
+| 28 | TestCreate_ConcurrentDuplicateEmail | 並行INSERT重複→ErrDuplicateEmail→正常返却 ✅ |
+| 29 | TestVerify_Validation_DisplayNameRequired | display_name 必須エラー |
+| 30 | TestVerify_Validation_DisplayNameWhitespace | display_name 空白のみ→エラー |
+| 31 | TestVerify_Validation_PasswordRequired | password 必須エラー |
+| 32 | TestVerify_Validation_PasswordConfirmationRequired | password_confirmation 必須エラー |
+| 33 | TestVerify_Validation_PasswordConfirmationNotMatch | パスワード不一致エラー |
+| 34 | TestVerify_Validation_PasswordTooShort | 8文字未満→PASSWORD_TOO_WEAK |
+| 35 | TestVerify_Validation_PasswordNoLetter | 英字なし→PASSWORD_TOO_WEAK |
+| 36 | TestVerify_Validation_PasswordNoDigit | 数字なし→PASSWORD_TOO_WEAK |
+| 37 | TestVerify_Validation_PasswordMinLength | ちょうど8文字・英字+数字→合格 |
+| 38 | TestVerify_Validation_AgreedToTermsRequired | agreed_to_terms=false→エラー |
+| 39 | TestVerify | 正常系・全テーブルINSERT・verified_at更新 |
+| 40 | TestVerify_EmptyToken | 空トークン→INVALID_REGISTRATION_TOKEN |
+| 41 | TestVerify_TokenHashError | SHA-256ハッシュエラー→500 |
+| 42 | TestVerify_PasswordHashError | bcryptエラー→500（tx内・全検証後） |
+| 43 | TestVerify_TokenNotFound | トークン未存在→INVALID_REGISTRATION_TOKEN |
+| 44 | TestVerify_AlreadyVerified | verified_at設定済み→USED_REGISTRATION_TOKEN |
+| 45 | TestVerify_TokenExpired | expires_at超過→EXPIRED_REGISTRATION_TOKEN |
+| 46 | TestVerify_EmailAlreadyExists | メール重複→USER_ALREADY_REGISTERED |
+| 47 | TestVerify_FindEmailError | メール検索DBエラー→500 |
+| 48 | TestVerify_UserCreateError | users INSERTエラー→500 |
+| 49 | TestVerify_UserEmailCreateError | user_emails INSERTエラー→500 |
+| 50 | TestVerify_UserCredentialCreateError | user_credentials INSERTエラー→500 |
+| 51 | TestVerify_UpdateVerifiedAtError | verified_at UPDATEエラー→500 |
+| 52 | TestVerify_DBError | txエラー→500 |
+| 53 | TestVerify_FirstUUIDError | 1回目UUID生成エラー→500 |
+| 54 | TestVerify_SecondUUIDError | 2回目UUID生成エラー→500 |
+| 55 | TestVerify_DisplayNameTrimmed | display_name 前後空白トリム確認 |
+| 56 | TestVerify_BcryptSkippedForInvalidToken | 不正トークン→bcrypt実行されない ✅ |
+| 57 | TestHashPasswordBcryptError | bcryptGenerate エラー→エラー返却 |
 
-**不足している観点:**
-- `outbox.mail_type = "user_registration"` が正しく設定されるか
-- `outbox.status = "pending"` が正しく設定されるか
-- `outbox.next_attempt_at` が現在時刻になっているか
+**不足している観点:** なし
 
 ---
 
@@ -192,13 +235,14 @@
 
 ## 9. DI・結合
 
-**ファイル:** `api/internal/app/app_test.go`（3件）
+**ファイル:** `api/internal/app/app_test.go`（4件）
 
 | # | テスト名 | 検証内容 |
 |---|---------|---------|
 | 1 | TestNewUserRegistrationService | DIワイヤリング |
 | 2 | TestNewUserRegistrationHandler | ハンドラワイヤリング |
-| 3 | TestUserRegistrationHandlerCreate | sqlmock使用の統合テスト（DB→HTTP） |
+| 3 | TestUserRegistrationHandlerCreate | sqlmock使用の統合テスト（仮登録 DB→HTTP） |
+| 4 | TestUserRegistrationHandlerVerify | sqlmock使用の統合テスト（本登録 DB→HTTP） |
 
 ---
 
@@ -230,4 +274,4 @@
 
 | 優先度 | 対象 | テスト案 | 理由 |
 |--------|------|---------|------|
-| 低 | `user_registration_service_test.go` | `outbox.mail_type == "user_registration"` | outboxが正しい種別で作成されるか |
+| — | — | — | 現時点で追加すべきテストなし |
