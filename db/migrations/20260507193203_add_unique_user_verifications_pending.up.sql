@@ -1,0 +1,1 @@
+-- noop: uq_user_verifications_pending is defined in 20260429184727_create_user_auth_kyc_tables.up.sql.

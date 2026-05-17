@@ -22,7 +22,13 @@ var jaMessages = map[string]string{
 	CodeEmailConfirmationNotMatch: "メールアドレスが一致しません",
 
 	CodeDisplayNameRequired:          "ユーザ名を入力してください",
+	CodeDisplayNameTooShort:          "ユーザ名は3文字以上で入力してください",
+	CodeDisplayNameTooLong:           "ユーザ名は30文字以内で入力してください",
+	CodeDisplayNameControlChar:       "ユーザ名に使用できない文字が含まれています",
+	CodeDisplayNameZeroWidth:         "ユーザ名に使用できない文字が含まれています",
+	CodeDisplayNameReserved:          "このユーザ名は使用できません",
 	CodePasswordRequired:             "パスワードを入力してください",
+	CodePasswordTooLong:              "パスワードは72文字以内で入力してください",
 	CodePasswordTooWeak:              "パスワードは8文字以上で、英字と数字をそれぞれ1文字以上含めてください",
 	CodePasswordConfirmationRequired: "確認用パスワードを入力してください",
 	CodePasswordConfirmationNotMatch: "パスワードが一致しません",

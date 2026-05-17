@@ -24,27 +24,28 @@
 | Migration | golang-migrate |
 | Hot Reload | air |
 | Dev Mail | Mailpit |
-| UUID | v7をGo側で生成（DBでは生成しない） |
+| UUID | UUID v7 を Go 側で生成 |
 | Go Module | app-api |
 
 ---
 
 ## Development Flow
 
-**必ずこの順序で進める。省略禁止。**
+必ずこの順序で進める。
 
 1. 方針決定（ユーザ + Claude Code）
 2. 設計（Claude Code） → ユーザレビュー
-3. 実装 + テスト（Claude Code） → lint/test通過確認
-4. 動作確認（ユーザ）
-5. ドキュメント作成（Claude Code） → ユーザレビュー
-6. コミット（ユーザのみ）
+3. 実装 + テスト（Claude Code）
+4. lint / test 通過確認
+5. 動作確認（ユーザ）
+6. ドキュメント更新
+7. コミット（ユーザのみ）
 
 ---
 
 ## Absolute Rules
 
-**禁止事項（即停止）**
+### 禁止事項
 
 - 方針未決定で設計しない
 - ユーザレビュー前に実装しない
@@ -52,38 +53,88 @@
 - `latest` / `@latest` を使用しない
 - 指示なしのリファクタリング禁止
 - コメント・インデント・クォートを勝手に変更しない
+- bootstrap script と migration を混在させない
+- migration に連番形式を使用しない
 
-**必須事項（完了条件）**
+### 必須事項
 
 - 実装後にテストコード作成・更新
 - カバレッジ100%達成
 - lint / test 全通過
 - ユーザの最終動作確認完了
-- フロントエンドは長期運用前提で TypeScript + TSX に統一する
-- 既存 JSX は段階的に TSX へ移行する
-- TSX移行は1ファイルずつ行い、各ステップで lint / test を通す
+- フロントエンドは TypeScript + TSX に統一する
+
+---
+
+## Architecture Rules
+
+### Migration
+
+- migration名は `YYYYMMDDHHMMSS_name` を使用する
+- timestamp migration を必須とする
+- migration は schema evolution のみを扱う
+- extension作成は bootstrap 側で扱う
+
+### Bootstrap Script
+
+```text
+db/migrations/000000_init_user.sql
+```
+
+これは migration ではなく bootstrap script として扱う。
+
+役割:
+
+- role作成
+- DB作成
+- extension作成
+
+### UUID
+
+- UUID は Go 側で v7 を生成する
+- DB側で UUID を生成しない
+
+### Database
+
+- PostgreSQL を唯一の正とする
+- FK を必ず使用する
+- 物理削除より論理削除を優先する
+- DBは最低限の整合性を守る
+- 複雑な validation は application layer で行う
+
+### Application Layer
+
+- validation は Go 側を主とする
+- repository は DB責務のみを持つ
+- service に business logic を集約する
+- handler に business logic を書かない
+
+### Testing
+
+- 開発DBとテストDBを分離する
+- 開発RedisとテストRedisを分離する
+- test は必ずテスト用DB/Redisを使用する
 
 ---
 
 ## Quality Gate
 
-**Backend（必須）**
+### Backend
 
 ```bash
-docker compose exec api gofmt -w internal cmd
-docker compose exec api golangci-lint run
-docker compose exec api go test ./... -cover
+make fmt
+make test-cover
 ```
 
-**Frontend（必須）**
+### Frontend
 
 ```bash
-docker compose exec frontend npx eslint src --fix
-docker compose exec frontend npm run lint
-docker compose exec frontend npm run test
+make frontend-lint
+make frontend-test
+make frontend-typecheck
 ```
 
-**latest混入チェック（必須）**
+### latest混入チェック
 
 ```bash
 grep -RIn --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=vendor "latest\|@latest" .
@@ -93,8 +144,9 @@ grep -RIn --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=vendor "la
 
 ## Documentation
 
-**作業前に必ず参照。作業後に必ず更新。**
+作業前に参照し、作業後に更新する。
 
+```text
 docs/ai/
 ├── development.md
 ├── backend.md
@@ -103,11 +155,16 @@ docs/ai/
 ├── database.md
 ├── migration.md
 └── testing.md
+```
 
 ---
 
 ## Naming
 
-正式名称：**コレナンボ・オークション**
+正式名称:
+
+```text
+コレナンボ・オークション
+```
 
 「コレナンボ」と省略しない。

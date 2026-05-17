@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"time"
 
@@ -79,7 +80,12 @@ func run(
 		})
 		if err != nil {
 			log.Printf("[outbox] failed id=%s err=%s", p.ID, err.Error())
-			_ = repo.MarkFailed(ctx, p.ID, err.Error(), time.Now().Add(5*time.Minute))
+			var nonRetryable *mail.NonRetryableMailError
+			if errors.As(err, &nonRetryable) {
+				_ = repo.MarkFailed(ctx, p.ID, err.Error(), time.Now().Add(24*time.Hour))
+			} else {
+				_ = repo.MarkRetry(ctx, p.ID, err.Error(), time.Now().Add(5*time.Minute))
+			}
 			continue
 		}
 

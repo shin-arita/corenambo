@@ -10,6 +10,13 @@ import (
 	"app-api/internal/i18n"
 )
 
+func TestNonRetryableMailErrorMessage(t *testing.T) {
+	err := &NonRetryableMailError{Msg: "something failed"}
+	if err.Error() != "something failed" {
+		t.Fatalf("unexpected message: %s", err.Error())
+	}
+}
+
 func TestNewSMTPMailer(t *testing.T) {
 	mailer := NewSMTPMailer("mail", "1025", "noreply@example.com", "", "", false)
 
@@ -237,6 +244,10 @@ func TestSMTPMailerSendUserRegistrationMailTemplateParseError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
+	var nonRetryable *NonRetryableMailError
+	if !errors.As(err, &nonRetryable) {
+		t.Fatalf("expected NonRetryableMailError, got %T: %v", err, err)
+	}
 }
 
 type executeErrorTranslator struct{}
@@ -262,6 +273,10 @@ func TestSMTPMailerSendUserRegistrationMailTemplateExecuteError(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error")
+	}
+	var nonRetryable *NonRetryableMailError
+	if !errors.As(err, &nonRetryable) {
+		t.Fatalf("expected NonRetryableMailError, got %T: %v", err, err)
 	}
 }
 
@@ -315,6 +330,39 @@ func TestSMTPMailerSendUserRegistrationMail_EmptyURLReturnsError(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error when URL is empty")
+	}
+	var nonRetryable *NonRetryableMailError
+	if !errors.As(err, &nonRetryable) {
+		t.Fatalf("expected NonRetryableMailError, got %T: %v", err, err)
+	}
+	if nonRetryable.Msg != "registration URL is empty" {
+		t.Fatalf("unexpected error message: %s", nonRetryable.Msg)
+	}
+}
+
+func TestSMTPMailerSendUserRegistrationMailSendErrorIsRetryable(t *testing.T) {
+	mailer := &SMTPMailer{
+		Host: "mail",
+		Port: "1025",
+		From: "noreply@example.com",
+		sendMail: func(addr string, _ smtp.Auth, from string, to []string, msg []byte) error {
+			return errors.New("connection refused")
+		},
+		tl: i18n.NewTranslator(),
+	}
+
+	err := mailer.SendUserRegistrationMail(context.Background(), UserRegistrationMail{
+		To:             "test@example.com",
+		URL:            "http://example.com/verify?token=abc",
+		Lang:           "ja",
+		ExpiresMinutes: 60,
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var nonRetryable *NonRetryableMailError
+	if errors.As(err, &nonRetryable) {
+		t.Fatal("SMTP send error should be retryable, not NonRetryableMailError")
 	}
 }
 

@@ -17,15 +17,15 @@ import (
 )
 
 type mockService struct {
-	out              *service.CreateUserRegistrationOutput
-	err              error
-	input            service.CreateUserRegistrationInput
-	verifyOut        *service.VerifyUserRegistrationOutput
-	verifyErr        error
-	verifyInput      service.VerifyUserRegistrationInput
-	checkTokenOut    *service.CheckTokenOutput
-	checkTokenErr    error
-	checkTokenInput  service.CheckTokenInput
+	out             *service.CreateUserRegistrationOutput
+	err             error
+	input           service.CreateUserRegistrationInput
+	verifyOut       *service.VerifyUserRegistrationOutput
+	verifyErr       error
+	verifyInput     service.VerifyUserRegistrationInput
+	checkTokenOut   *service.CheckTokenOutput
+	checkTokenErr   error
+	checkTokenInput service.CheckTokenInput
 }
 
 func (m *mockService) Create(ctx context.Context, in service.CreateUserRegistrationInput) (*service.CreateUserRegistrationOutput, error) {
@@ -127,8 +127,8 @@ func TestNewUserRegistrationHandler(t *testing.T) {
 		t.Fatal("rate limiter is nil")
 	}
 
-	if h.rateLimitConfig.RedisAddr() == "" {
-		t.Fatal("redis addr is empty")
+	if h.rateLimitConfig.RedisURL() == "" {
+		t.Fatal("redis url is empty")
 	}
 }
 

@@ -3,12 +3,20 @@ package handler
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 )
 
+func testRedisURL() string {
+	if u := os.Getenv("REDIS_URL"); u != "" {
+		return u
+	}
+	return "redis://redis:6379/1"
+}
+
 func TestRedisRateLimitStoreIncr(t *testing.T) {
-	store := newRedisRateLimitStore("redis:6379")
+	store := newRedisRateLimitStore(testRedisURL())
 	key := fmt.Sprintf("test:rate_limit:%d", time.Now().UnixNano())
 
 	count, err := store.Incr(context.Background(), key, time.Minute)
@@ -31,7 +39,7 @@ func TestRedisRateLimitStoreIncr(t *testing.T) {
 }
 
 func TestRedisRateLimitStoreIncrError(t *testing.T) {
-	store := newRedisRateLimitStore("localhost:0")
+	store := newRedisRateLimitStore("redis://localhost:0/1")
 
 	_, err := store.Incr(context.Background(), "test", time.Second)
 
@@ -40,8 +48,17 @@ func TestRedisRateLimitStoreIncrError(t *testing.T) {
 	}
 }
 
+func TestNewRedisRateLimitStorePanicOnInvalidURL(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic for invalid Redis URL")
+		}
+	}()
+	newRedisRateLimitStore("not-a-valid-url")
+}
+
 func TestRedisRateLimitStoreTTLNotReset(t *testing.T) {
-	store := newRedisRateLimitStore("redis:6379")
+	store := newRedisRateLimitStore(testRedisURL())
 	key := fmt.Sprintf("test:rate_limit:ttl:%d", time.Now().UnixNano())
 
 	// 1回目: キーを作成しTTLを3秒にセット

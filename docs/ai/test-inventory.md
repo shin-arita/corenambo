@@ -104,7 +104,7 @@
 | 1 | TestRateLimiterAllowIP | IPベース制限の許可/拒否 |
 | 2 | TestRateLimiterAllowEmail | メールベース制限（正規化+SHA256キー） |
 | 3 | TestRateLimiterAllowWhenLimitIsZero | limit=0のとき常に許可 |
-| 4 | TestRateLimiterAllowWhenStoreError | Redisエラー→フェイルオープン |
+| 4 | TestRateLimiterAllowWhenStoreError | Redisエラー→フェイルクローズド |
 
 **不足している観点:** なし
 
@@ -270,8 +270,8 @@
 
 ---
 
-## 追加すべきテスト案（優先度順）
+## 追加すべきテスト（優先度順）
 
-| 優先度 | 対象 | テスト案 | 理由 |
+| 優先度 | 対象 | テスト | 理由 |
 |--------|------|---------|------|
 | — | — | — | 現時点で追加すべきテストなし |

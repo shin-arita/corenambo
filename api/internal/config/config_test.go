@@ -101,14 +101,14 @@ func TestRegistrationConfigRegistrationTokenExpiresMinutes(t *testing.T) {
 }
 
 func TestNewRateLimitConfigDefault(t *testing.T) {
-	t.Setenv("REDIS_ADDR", "")
+	t.Setenv("REDIS_URL", "")
 	t.Setenv("RATE_LIMIT_IP_PER_MINUTE", "")
 	t.Setenv("RATE_LIMIT_EMAIL_PER_5MIN", "")
 
 	c := NewRateLimitConfig()
 
-	if c.RedisAddr() != "redis:6379" {
-		t.Fatalf("unexpected redis addr: %s", c.RedisAddr())
+	if c.RedisURL() != "redis://redis:6379/0" {
+		t.Fatalf("unexpected redis url: %s", c.RedisURL())
 	}
 
 	if c.RateLimitIPPerMinute() != 5 {
@@ -120,15 +120,18 @@ func TestNewRateLimitConfigDefault(t *testing.T) {
 	}
 }
 
-func TestNewRateLimitConfigFromEnv(t *testing.T) {
+func TestNewRateLimitConfigRedisAddrIgnored(t *testing.T) {
+	// REDIS_ADDR is no longer supported; REDIS_URL is the canonical setting.
+	// Setting REDIS_ADDR must have no effect on the resolved URL.
+	t.Setenv("REDIS_URL", "")
 	t.Setenv("REDIS_ADDR", "localhost:6379")
 	t.Setenv("RATE_LIMIT_IP_PER_MINUTE", "10")
 	t.Setenv("RATE_LIMIT_EMAIL_PER_5MIN", "2")
 
 	c := NewRateLimitConfig()
 
-	if c.RedisAddr() != "localhost:6379" {
-		t.Fatalf("unexpected redis addr: %s", c.RedisAddr())
+	if c.RedisURL() != "redis://redis:6379/0" {
+		t.Fatalf("REDIS_ADDR should be ignored, unexpected redis url: %s", c.RedisURL())
 	}
 
 	if c.RateLimitIPPerMinute() != 10 {
@@ -140,15 +143,27 @@ func TestNewRateLimitConfigFromEnv(t *testing.T) {
 	}
 }
 
+func TestNewRateLimitConfigFromRedisURL(t *testing.T) {
+	t.Setenv("REDIS_URL", "redis://redis:6379/1")
+	t.Setenv("RATE_LIMIT_IP_PER_MINUTE", "")
+	t.Setenv("RATE_LIMIT_EMAIL_PER_5MIN", "")
+
+	c := NewRateLimitConfig()
+
+	if c.RedisURL() != "redis://redis:6379/1" {
+		t.Fatalf("unexpected redis url: %s", c.RedisURL())
+	}
+}
+
 func TestNewRateLimitConfigInvalidEnv(t *testing.T) {
-	t.Setenv("REDIS_ADDR", "")
+	t.Setenv("REDIS_URL", "")
 	t.Setenv("RATE_LIMIT_IP_PER_MINUTE", "abc")
 	t.Setenv("RATE_LIMIT_EMAIL_PER_5MIN", "0")
 
 	c := NewRateLimitConfig()
 
-	if c.RedisAddr() != "redis:6379" {
-		t.Fatalf("unexpected redis addr: %s", c.RedisAddr())
+	if c.RedisURL() != "redis://redis:6379/0" {
+		t.Fatalf("unexpected redis url: %s", c.RedisURL())
 	}
 
 	if c.RateLimitIPPerMinute() != 5 {

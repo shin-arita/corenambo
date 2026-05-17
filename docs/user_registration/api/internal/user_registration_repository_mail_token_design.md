@@ -30,7 +30,8 @@
 - FetchPending
 - MarkProcessing
 - MarkSent
-- MarkFailed
+- MarkRetry（送信失敗・再送可能）
+- MarkFailed（最終失敗・再送不可）
 
 ---
 
@@ -39,9 +40,10 @@
 ### フロー
 
 1. service が mail_outboxes に登録
-2. worker が取得
+2. worker が pending レコードを取得
 3. SMTP送信
-4. 状態更新
+4. 成功時: MarkSent（status=sent）
+5. 失敗時: MarkRetry または MarkFailed で状態更新
 
 ---
 
@@ -53,6 +55,38 @@
 
 ---
 
+### retry ロジック
+
+| 条件 | 呼び出し | status | retry_count |
+|------|---------|--------|-------------|
+| SMTP送信失敗（接続エラー等） | MarkRetry | pending | +1 |
+| max retry 到達（WorkerMaxRetryCount 以上） | MarkFailed | failed | 変更なし |
+| payload 不正（JSON parse 失敗） | MarkFailed | failed | 変更なし |
+| 送信前に確定できる失敗（NonRetryableMailError） | MarkFailed | failed | 変更なし |
+
+- `MarkRetry` は `status = 'pending'`, `retry_count = retry_count + 1`, `next_attempt_at = 現在 + 5分` に更新する
+- `FetchPending` は `status = 'pending' AND next_attempt_at <= NOW()` で取得するため、次回のポーリング時に再送対象となる
+- `MarkFailed` は `status = 'failed'` のみを設定し、`retry_count` は増やさない（最終状態なので変更不要）
+- invalid payload（JSON parse 失敗）は retry しても解消しないため、即 MarkFailed（非retryable failure）
+- max retry 到達時は `next_attempt_at = 24時間後` で MarkFailed し、FetchPending の対象外となる
+
+### NonRetryableMailError
+
+`mail.NonRetryableMailError` は送信前に確定できる非retryable なエラーを表す型。
+worker は `errors.As` でこの型を検出し、`MarkRetry` の代わりに `MarkFailed` を呼ぶ。
+
+非retryable とみなす条件（`mail` パッケージ内で返す）：
+
+| 条件 | エラーメッセージ |
+|------|-------------|
+| payload の `url` フィールドが空 | `registration URL is empty` |
+| メールテンプレートの parse 失敗 | テンプレートエラーメッセージ |
+| メールテンプレートの execute 失敗 | テンプレートエラーメッセージ |
+
+SMTP接続失敗・タイムアウト等の送信エラーは retryable として `MarkRetry` が呼ばれる。
+
+---
+
 ### payload スキーマ
 
 `mail_outboxes.payload` は JSON 文字列として保存する。
@@ -61,17 +95,17 @@
 {
   "email": "user@example.com",
   "url": "https://example.com/registration/verify?token=xxx",
-  "lang": "ja",
-  "expires_minutes": 60
+  "lang": "ja"
 }
 ```
 
-| フィールド           | 型       | 説明                       |
-|----------------|---------|--------------------------|
-| email          | string  | 送信先メールアドレス              |
-| url            | string  | 本登録URL（生トークン付き）         |
-| lang           | string  | メール送信言語（`ja` / `en`）    |
-| expires_minutes | integer | 本登録URLの有効期限（分）          |
+| フィールド | 型     | 説明                          |
+|---------|--------|-------------------------------|
+| email   | string | 送信先メールアドレス            |
+| url     | string | 本登録URL（生トークン付き）     |
+| lang    | string | メール送信言語（`ja` / `en`）  |
+
+`expires_minutes` は payload には含まない。worker が環境変数 `REGISTRATION_TOKEN_EXPIRES_MINUTES` の設定値を使用する。
 
 ---
 
@@ -92,9 +126,11 @@
 
 ## 7. worker
 
+`cmd/worker` が outbox の正式処理経路。本番環境で動作し、実際にメールを送信する。
+
 - 1秒間隔でポーリング
 - pending を取得
-- retry制御あり
+- retry制御あり（NonRetryableMailError / retryable error / max retry の3分岐）
 
 ---
 

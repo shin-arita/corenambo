@@ -1,75 +1,170 @@
-# バックエンド方針
+# CLAUDE.md
 
-## アーキテクチャ
+## Project
 
-以下のレイヤ構成を厳守する
+**コレナンボ・オークション** — 価格降下型オークションシステム。
 
-handler
-service
-repository
-model
-config
-app_error
-i18n
-mail
-token
-uuid
-clock
-logger
+- 時間経過で価格が下がる
+- ユーザはホールド（一時確保）できる
+- 複数ユーザが競合すると価格が上昇する
+- 実サービス運用 + 技術ポートフォリオ公開が目的
 
 ---
 
-## ルール
+## Tech Stack
 
-- handlerで生エラーを返さない
-- businessロジックはservice層に集約する
-- DBアクセスはrepositoryのみで行う
-- 共通処理は適切な層に分離する
-
----
-
-## エラーハンドリング
-
-- code / status を持つエラーを使用する
-- 内部エラーはログのみ出力
-- レスポンスに詳細を含めない
-
----
-
-## 実装済みAPI
-
-### ユーザ仮登録
-
-```
-POST /api/v1/user-registration-requests
-```
-
-- メールアドレスを受け取り、本登録用トークンを含むメールを送信する
-- トークンは SHA-256 ハッシュで DB に保存する（平文保存禁止）
-- メール送信は Outbox Pattern（worker による非同期処理）
-
-### ユーザ本登録
-
-```
-POST /api/v1/user-registrations/verify
-```
-
-- トークン（平文）を受け取り、SHA-256 ハッシュで `user_registration_requests` を照合する
-- 以下のテーブルを単一トランザクションで書き込む
-  - `users` — ユーザ本体（display_name, status='active'）
-  - `user_emails` — メールアドレス（is_primary=true, verified_at=now）
-  - `user_credentials` — bcrypt ハッシュ化したパスワード（DefaultCost）
-  - `user_registration_requests.verified_at` — 本登録完了日時
-- `FOR UPDATE` による排他ロックで同一トークンの二重処理を防ぐ
+| 領域 | 技術 |
+|------|------|
+| Frontend | React + Vite + TypeScript |
+| Backend | Go + Gin |
+| DB | PostgreSQL + PGroonga |
+| Cache / Rate Limit | Redis |
+| Tokenizer | MeCab |
+| Environment | Docker Compose |
+| Migration | golang-migrate |
+| Hot Reload | air |
+| Dev Mail | Mailpit |
+| UUID | UUID v7 を Go 側で生成 |
+| Go Module | app-api |
 
 ---
 
-## テーブル責務
+## Development Flow
 
-| テーブル | 責務 |
-|--------|------|
-| user_registration_requests | 仮登録トークンの管理。token_hash のみ保存し平文は持たない |
-| users | ユーザ本体。display_name と status を持つ |
-| user_emails | メールアドレス管理。LOWER インデックスで大文字小文字を区別しない |
-| user_credentials | パスワードハッシュ管理。bcrypt ハッシュのみ保存し平文は持たない。現時点ではパスワード認証情報のみを保持する。将来的に認証方式を拡張する場合も、users 本体ではなく認証情報として責務を分離する |
-| mail_outboxes | 非同期メール送信キュー。送信後 payload を `'{}'` で上書きする |
+必ずこの順序で進める。
+
+1. 方針決定（ユーザ + Claude Code）
+2. 設計（Claude Code） → ユーザレビュー
+3. 実装 + テスト（Claude Code）
+4. lint / test 通過確認
+5. 動作確認（ユーザ）
+6. ドキュメント更新
+7. コミット（ユーザのみ）
+
+---
+
+## Absolute Rules
+
+### 禁止事項
+
+- 方針未決定で設計しない
+- ユーザレビュー前に実装しない
+- Claude Codeはコミットしない
+- `latest` / `@latest` を使用しない
+- 指示なしのリファクタリング禁止
+- コメント・インデント・クォートを勝手に変更しない
+- bootstrap script と migration を混在させない
+- migration に連番形式を使用しない
+
+### 必須事項
+
+- 実装後にテストコード作成・更新
+- カバレッジ100%達成
+- lint / test 全通過
+- ユーザの最終動作確認完了
+- フロントエンドは TypeScript + TSX に統一する
+
+---
+
+## Architecture Rules
+
+### Migration
+
+- migration名は `YYYYMMDDHHMMSS_name` を使用する
+- timestamp migration を必須とする
+- migration は schema evolution のみを扱う
+- extension作成は bootstrap 側で扱う
+
+### Bootstrap Script
+
+```text
+db/migrations/000000_init_user.sql
+```
+
+これは migration ではなく bootstrap script として扱う。
+
+役割:
+
+- role作成
+- DB作成
+- extension作成
+
+### UUID
+
+- UUID は Go 側で v7 を生成する
+- DB側で UUID を生成しない
+
+### Database
+
+- PostgreSQL を唯一の正とする
+- FK を必ず使用する
+- 物理削除より論理削除を優先する
+- DBは最低限の整合性を守る
+- 複雑な validation は application layer で行う
+
+### Application Layer
+
+- validation は Go 側を主とする
+- repository は DB責務のみを持つ
+- service に business logic を集約する
+- handler に business logic を書かない
+
+### Testing
+
+- 開発DBとテストDBを分離する
+- 開発RedisとテストRedisを分離する
+- test は必ずテスト用DB/Redisを使用する
+
+---
+
+## Quality Gate
+
+### Backend
+
+```bash
+make lint
+make test-cover
+```
+
+### Frontend
+
+```bash
+make frontend-lint
+make frontend-test
+make frontend-typecheck
+```
+
+### latest混入チェック
+
+```bash
+grep -RIn --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=vendor "latest\|@latest" .
+```
+
+---
+
+## Documentation
+
+作業前に参照し、作業後に更新する。
+
+```text
+docs/ai/
+├── development.md
+├── backend.md
+├── frontend.md
+├── security.md
+├── database.md
+├── migration.md
+└── testing.md
+```
+
+---
+
+## Naming
+
+正式名称:
+
+```text
+コレナンボ・オークション
+```
+
+「コレナンボ」と省略しない。

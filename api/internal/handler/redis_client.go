@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -15,11 +16,16 @@ type redisRateLimitStore struct {
 	client *redis.Client
 }
 
-func newRedisRateLimitStore(addr string) *redisRateLimitStore {
+// newRedisRateLimitStore constructs a store from a Redis URL.
+// Panics on an invalid URL: this is a startup configuration error, not a runtime error,
+// so a panic here prevents the server from starting with a broken Redis config.
+func newRedisRateLimitStore(redisURL string) *redisRateLimitStore {
+	opt, err := redis.ParseURL(redisURL)
+	if err != nil {
+		panic(fmt.Sprintf("invalid Redis URL %q: %v", redisURL, err))
+	}
 	return &redisRateLimitStore{
-		client: redis.NewClient(&redis.Options{
-			Addr: addr,
-		}),
+		client: redis.NewClient(opt),
 	}
 }
 

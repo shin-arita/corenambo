@@ -6,21 +6,26 @@ import (
 )
 
 type RateLimitConfig struct {
-	RedisAddress       string
+	RedisURLStr        string
 	IPPerMinute        int
 	EmailPerFiveMinute int
 }
 
 func NewRateLimitConfig() RateLimitConfig {
 	return RateLimitConfig{
-		RedisAddress:       getEnvString("REDIS_ADDR", "redis:6379"),
+		RedisURLStr:        buildRedisURL(),
 		IPPerMinute:        getEnvInt("RATE_LIMIT_IP_PER_MINUTE", 5),
 		EmailPerFiveMinute: getEnvInt("RATE_LIMIT_EMAIL_PER_5MIN", 1),
 	}
 }
 
-func (c RateLimitConfig) RedisAddr() string {
-	return c.RedisAddress
+// buildRedisURL returns the Redis URL from REDIS_URL env var (default: redis://redis:6379/0).
+func buildRedisURL() string {
+	return getEnvString("REDIS_URL", "redis://redis:6379/0")
+}
+
+func (c RateLimitConfig) RedisURL() string {
+	return c.RedisURLStr
 }
 
 func (c RateLimitConfig) RateLimitIPPerMinute() int {

@@ -22,7 +22,13 @@ const (
 	CodeEmailConfirmationNotMatch = "EMAIL_CONFIRMATION_NOT_MATCH"
 
 	CodeDisplayNameRequired          = "DISPLAY_NAME_REQUIRED"
+	CodeDisplayNameTooShort          = "DISPLAY_NAME_TOO_SHORT"
+	CodeDisplayNameTooLong           = "DISPLAY_NAME_TOO_LONG"
+	CodeDisplayNameControlChar       = "DISPLAY_NAME_CONTROL_CHAR"
+	CodeDisplayNameZeroWidth         = "DISPLAY_NAME_ZERO_WIDTH"
+	CodeDisplayNameReserved          = "DISPLAY_NAME_RESERVED"
 	CodePasswordRequired             = "PASSWORD_REQUIRED"
+	CodePasswordTooLong              = "PASSWORD_TOO_LONG"
 	CodePasswordTooWeak              = "PASSWORD_TOO_WEAK"
 	CodePasswordConfirmationRequired = "PASSWORD_CONFIRMATION_REQUIRED"
 	CodePasswordConfirmationNotMatch = "PASSWORD_CONFIRMATION_NOT_MATCH"

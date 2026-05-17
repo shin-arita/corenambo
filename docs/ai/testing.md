@@ -7,6 +7,40 @@
 
 ---
 
+## テスト用DB（app_db_test）のセットアップ
+
+### 概要
+
+- ユニットテストは `app_db_test` データベースを使用する（開発用 `app_db` は破壊しない）
+- テストDBが存在しない場合は `make test-db-setup` で作成する
+
+### セットアップ手順
+
+```bash
+make test-db-setup
+```
+
+`make test-db-setup` は以下を順に実行する：
+
+1. 既存の `app_db_test` に接続中のセッションを切断する
+2. `app_db_test` を DROP する
+3. `app_db_test` を CREATE する（オーナー: `app_user`、エンコード: UTF8、ロケール: ja_JP.UTF-8）
+4. `pgcrypto` / `pgroonga` 拡張を作成する（postgres スーパーユーザで実行）
+5. 最新 migration を `app_db_test` に適用する
+
+### 実行タイミング
+
+- `make test-cover` を初めて実行する前
+- migration を追加・変更したとき
+- `app_db_test` が壊れたとき
+
+### 注意事項
+
+- `make test-db-setup` は `app_db`（開発用DB）に影響を与えない
+- テスト実行時は `DATABASE_URL` が `app_db_test` を向くよう `Makefile` で設定済み
+
+---
+
 ## Backend (Go)
 
 ### 対象

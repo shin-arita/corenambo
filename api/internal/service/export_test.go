@@ -236,6 +236,9 @@ func (d *dummyOutboxRepo) FetchPending(ctx context.Context, i int) ([]*model.Mai
 }
 func (d *dummyOutboxRepo) MarkProcessing(ctx context.Context, id string) error        { return nil }
 func (d *dummyOutboxRepo) MarkSent(ctx context.Context, id string, t time.Time) error { return nil }
+func (d *dummyOutboxRepo) MarkRetry(ctx context.Context, id string, s string, t time.Time) error {
+	return nil
+}
 func (d *dummyOutboxRepo) MarkFailed(ctx context.Context, id string, s string, t time.Time) error {
 	return nil
 }
@@ -446,6 +449,9 @@ func (d *captureOutboxRepo) FetchPending(ctx context.Context, i int) ([]*model.M
 }
 func (d *captureOutboxRepo) MarkProcessing(ctx context.Context, id string) error        { return nil }
 func (d *captureOutboxRepo) MarkSent(ctx context.Context, id string, t time.Time) error { return nil }
+func (d *captureOutboxRepo) MarkRetry(ctx context.Context, id string, s string, t time.Time) error {
+	return nil
+}
 func (d *captureOutboxRepo) MarkFailed(ctx context.Context, id string, s string, t time.Time) error {
 	return nil
 }
@@ -493,6 +499,9 @@ func (d *captureFullOutboxRepo) FetchPending(ctx context.Context, i int) ([]*mod
 }
 func (d *captureFullOutboxRepo) MarkProcessing(ctx context.Context, id string) error { return nil }
 func (d *captureFullOutboxRepo) MarkSent(ctx context.Context, id string, t time.Time) error {
+	return nil
+}
+func (d *captureFullOutboxRepo) MarkRetry(ctx context.Context, id string, s string, t time.Time) error {
 	return nil
 }
 func (d *captureFullOutboxRepo) MarkFailed(ctx context.Context, id string, s string, t time.Time) error {

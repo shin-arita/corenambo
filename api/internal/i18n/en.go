@@ -22,7 +22,13 @@ var enMessages = map[string]string{
 	CodeEmailConfirmationNotMatch: "Email addresses do not match",
 
 	CodeDisplayNameRequired:          "Please enter your username",
+	CodeDisplayNameTooShort:          "Username must be at least 3 characters",
+	CodeDisplayNameTooLong:           "Username must be 30 characters or less",
+	CodeDisplayNameControlChar:       "Username contains invalid characters",
+	CodeDisplayNameZeroWidth:         "Username contains invalid characters",
+	CodeDisplayNameReserved:          "This username is not available",
 	CodePasswordRequired:             "Please enter your password",
+	CodePasswordTooLong:              "Password must be 72 characters or less",
 	CodePasswordTooWeak:              "Password must be at least 8 characters long and include at least one letter and one number",
 	CodePasswordConfirmationRequired: "Please enter the password confirmation",
 	CodePasswordConfirmationNotMatch: "Passwords do not match",

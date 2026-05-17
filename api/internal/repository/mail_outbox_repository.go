@@ -12,6 +12,7 @@ type MailOutboxRepository interface {
 	FetchPending(ctx context.Context, limit int) ([]*model.MailOutbox, error)
 	MarkProcessing(ctx context.Context, id string) error
 	MarkSent(ctx context.Context, id string, sentAt time.Time) error
+	MarkRetry(ctx context.Context, id string, reason string, nextRetryAt time.Time) error
 	MarkFailed(ctx context.Context, id string, reason string, nextRetryAt time.Time) error
 	Create(ctx context.Context, m *model.MailOutbox) error
 	ResetStuckProcessing(ctx context.Context, stuckBefore time.Time) error
@@ -89,13 +90,25 @@ WHERE id = $1
 	return err
 }
 
+func (r *mailOutboxRepository) MarkRetry(ctx context.Context, id string, reason string, nextRetryAt time.Time) error {
+	_, err := r.db.ExecContext(ctx, `
+UPDATE mail_outboxes
+SET status = 'pending',
+    last_error = $2,
+    next_attempt_at = $3,
+    retry_count = retry_count + 1,
+    updated_at = NOW()
+WHERE id = $1
+`, id, reason, nextRetryAt)
+	return err
+}
+
 func (r *mailOutboxRepository) MarkFailed(ctx context.Context, id string, reason string, nextRetryAt time.Time) error {
 	_, err := r.db.ExecContext(ctx, `
 UPDATE mail_outboxes
 SET status = 'failed',
     last_error = $2,
     next_attempt_at = $3,
-    retry_count = retry_count + 1,
     updated_at = NOW()
 WHERE id = $1
 `, id, reason, nextRetryAt)

@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/text/unicode/norm"
 
 	"app-api/internal/app_error"
 	"app-api/internal/clock"
@@ -126,7 +127,7 @@ func validateCreateInput(input CreateUserRegistrationInput) error {
 		fieldErrors["email"] = append(fieldErrors["email"], app_error.FieldError{
 			Code: i18n.CodeEmailRequired,
 		})
-	} else if _, err := mail.ParseAddress(email); err != nil {
+	} else if addr, err := mail.ParseAddress(email); err != nil || addr.Name != "" || addr.Address != email {
 		fieldErrors["email"] = append(fieldErrors["email"], app_error.FieldError{
 			Code: i18n.CodeEmailFormatInvalid,
 		})
@@ -166,19 +167,100 @@ func isStrongPassword(password string) bool {
 	return hasLetter && hasDigit
 }
 
+// reservedDisplayNames は登録禁止のユーザ名リスト（日本語・英語・中国語）。
+// NFC+trim 済みの値に対して strings.ToLower で大小文字を正規化して完全一致判定する。
+var reservedDisplayNames = []string{
+	// 日本語
+	"管理者", "運営", "公式", "サポート", "システム",
+	// 英語
+	"admin", "administrator", "official", "support", "system", "root",
+	// 中国語
+	"管理员", "官方", "客服", "系统",
+}
+
+func isReservedDisplayName(name string) bool {
+	lower := strings.ToLower(name)
+	for _, r := range reservedDisplayNames {
+		if lower == strings.ToLower(r) {
+			return true
+		}
+	}
+	return false
+}
+
+// isControlChar は制御文字・改行・行区切り文字を検出する。
+func isControlChar(r rune) bool {
+	// unicode.IsControl は C0 (U+0000-U+001F) / DEL (U+007F) / C1 (U+0080-U+009F) を対象とする。
+	// U+2028 LINE SEPARATOR / U+2029 PARAGRAPH SEPARATOR は改行相当のため追加で禁止する。
+	return unicode.IsControl(r) || r == 0x2028 || r == 0x2029
+}
+
+// isDisallowedZeroWidth は ZWJ (U+200D) を除くゼロ幅文字を検出する。
+func isDisallowedZeroWidth(r rune) bool {
+	switch r {
+	case 0x200B, // ZERO WIDTH SPACE
+		0x200C, // ZERO WIDTH NON-JOINER
+		0xFEFF, // ZERO WIDTH NO-BREAK SPACE / BOM
+		0x2060, // WORD JOINER
+		0x2061, // FUNCTION APPLICATION
+		0x2062, // INVISIBLE TIMES
+		0x2063, // INVISIBLE SEPARATOR
+		0x2064, // INVISIBLE PLUS
+		0x034F, // COMBINING GRAPHEME JOINER
+		0x00AD: // SOFT HYPHEN
+		return true
+	}
+	return false
+}
+
+// validateDisplayName は NFC正規化・trim 済みの display_name に対して文字仕様を検証する。
+// 3〜30文字、制御文字禁止、ZWJ以外のゼロ幅文字禁止。
+func validateDisplayName(name string) *app_error.FieldError {
+	runes := []rune(name)
+	if len(runes) < 3 {
+		fe := app_error.FieldError{Code: i18n.CodeDisplayNameTooShort}
+		return &fe
+	}
+	if len(runes) > 30 {
+		fe := app_error.FieldError{Code: i18n.CodeDisplayNameTooLong}
+		return &fe
+	}
+	for _, r := range runes {
+		if isControlChar(r) {
+			fe := app_error.FieldError{Code: i18n.CodeDisplayNameControlChar}
+			return &fe
+		}
+		if isDisallowedZeroWidth(r) {
+			fe := app_error.FieldError{Code: i18n.CodeDisplayNameZeroWidth}
+			return &fe
+		}
+	}
+	if isReservedDisplayName(name) {
+		fe := app_error.FieldError{Code: i18n.CodeDisplayNameReserved}
+		return &fe
+	}
+	return nil
+}
+
 func validateVerifyInput(input VerifyUserRegistrationInput) error {
 	fieldErrors := map[string][]app_error.FieldError{}
 
-	displayName := strings.TrimSpace(input.DisplayName)
+	displayName := strings.TrimSpace(norm.NFC.String(input.DisplayName))
 	if displayName == "" {
 		fieldErrors["display_name"] = append(fieldErrors["display_name"], app_error.FieldError{
 			Code: i18n.CodeDisplayNameRequired,
 		})
+	} else if fe := validateDisplayName(displayName); fe != nil {
+		fieldErrors["display_name"] = append(fieldErrors["display_name"], *fe)
 	}
 
 	if input.Password == "" {
 		fieldErrors["password"] = append(fieldErrors["password"], app_error.FieldError{
 			Code: i18n.CodePasswordRequired,
+		})
+	} else if len(input.Password) > 72 {
+		fieldErrors["password"] = append(fieldErrors["password"], app_error.FieldError{
+			Code: i18n.CodePasswordTooLong,
 		})
 	} else if !isStrongPassword(input.Password) {
 		fieldErrors["password"] = append(fieldErrors["password"], app_error.FieldError{
@@ -348,7 +430,7 @@ func (s *userRegistrationService) Verify(
 		return nil, err
 	}
 
-	input.DisplayName = strings.TrimSpace(input.DisplayName)
+	input.DisplayName = strings.TrimSpace(norm.NFC.String(input.DisplayName))
 
 	tokenHash, err := s.tokenHasher.Hash(input.Token)
 	if err != nil {

@@ -3,7 +3,6 @@ package mail
 import (
 	"bytes"
 	"context"
-	"errors"
 	"net/smtp"
 	"strings"
 	"text/template"
@@ -39,7 +38,7 @@ func NewSMTPMailer(host, port, from, user, pass string, useTLS bool) Mailer {
 
 func (m *SMTPMailer) SendUserRegistrationMail(ctx context.Context, mailData UserRegistrationMail) error {
 	if mailData.URL == "" {
-		return errors.New("registration URL is empty")
+		return &NonRetryableMailError{Msg: "registration URL is empty"}
 	}
 
 	subjectText := m.tl.Translate(mailData.Lang, i18n.CodeMailUserRegistrationSubject)
@@ -47,7 +46,7 @@ func (m *SMTPMailer) SendUserRegistrationMail(ctx context.Context, mailData User
 
 	tmpl, err := template.New("mail").Option("missingkey=error").Parse(bodyTemplate)
 	if err != nil {
-		return err
+		return &NonRetryableMailError{Msg: err.Error()}
 	}
 
 	var buf bytes.Buffer
@@ -56,7 +55,7 @@ func (m *SMTPMailer) SendUserRegistrationMail(ctx context.Context, mailData User
 		"ExpiresMinutes": mailData.ExpiresMinutes,
 	})
 	if err != nil {
-		return err
+		return &NonRetryableMailError{Msg: err.Error()}
 	}
 
 	return m.send(mailData.To, subjectText, buf.String())

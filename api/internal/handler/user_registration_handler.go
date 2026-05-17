@@ -29,7 +29,7 @@ func NewUserRegistrationHandler(
 	return &UserRegistrationHandler{
 		service:         service,
 		translator:      translator,
-		rateLimiter:     newRateLimiter(newRedisRateLimitStore(rateLimitConfig.RedisAddr())),
+		rateLimiter:     newRateLimiter(newRedisRateLimitStore(rateLimitConfig.RedisURL())),
 		rateLimitConfig: rateLimitConfig,
 	}
 }
@@ -50,8 +50,8 @@ func NewUserRegistrationHandlerWithLimiter(
 }
 
 type CreateUserRegistrationRequest struct {
-	Email             string `json:"email" binding:"max=255"`
-	EmailConfirmation string `json:"email_confirmation" binding:"max=255"`
+	Email             string `json:"email"`
+	EmailConfirmation string `json:"email_confirmation"`
 }
 
 // normalizeLanguage はAccept-Languageヘッダーを許可リスト方式で正規化する
@@ -204,9 +204,9 @@ func (h *UserRegistrationHandler) CheckToken(c *gin.Context) {
 }
 
 type VerifyUserRegistrationRequest struct {
-	DisplayName          string `json:"display_name" binding:"max=100"`
-	Password             string `json:"password" binding:"max=255"`
-	PasswordConfirmation string `json:"password_confirmation" binding:"max=255"`
+	DisplayName          string `json:"display_name"`
+	Password             string `json:"password"`
+	PasswordConfirmation string `json:"password_confirmation"`
 	AgreedToTerms        bool   `json:"agreed_to_terms"`
 }
 

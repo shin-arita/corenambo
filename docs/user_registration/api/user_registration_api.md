@@ -306,7 +306,7 @@ last_sent_at の状態により分岐する。
 
 ---
 
-## 14. 想定レスポンスメッセージ
+## 14. レスポンスメッセージ一覧
 
 ### 14.1 正常系
 
@@ -328,7 +328,7 @@ last_sent_at の状態により分岐する。
 
 ---
 
-## 15. エラーコード案
+## 15. エラーコード一覧
 
 | コード                          | 説明                             |
 |------------------------------|--------------------------------|
@@ -402,12 +402,12 @@ Accept-Language: ja
 
 #### ボディパラメータ定義
 
-| 項目                    | 型      | 必須 | 最大長 | 説明                         |
-|-----------------------|--------|---:|------|----------------------------|
-| display_name          | string |  ○ | 100  | 画面表示用ユーザ名                  |
-| password              | string |  ○ | 255  | 設定するパスワード                  |
-| password_confirmation | string |  ○ | 255  | パスワード確認用                   |
-| agreed_to_terms       | bool   |  ○ | —    | 利用規約への同意（`true` のみ受け付け）    |
+| 項目                    | 型      | 必須 | 説明                         |
+|-----------------------|--------|---:|----------------------------|
+| display_name          | string |  ○ | 画面表示用ユーザ名（3〜30文字、rune数）     |
+| password              | string |  ○ | 設定するパスワード                  |
+| password_confirmation | string |  ○ | パスワード確認用                   |
+| agreed_to_terms       | bool   |  ○ | 利用規約への同意（`true` のみ受け付け）    |
 
 ---
 
@@ -536,10 +536,31 @@ Accept-Language: ja
 | 項目                    | ルール                                           |
 |-----------------------|-----------------------------------------------|
 | token（クエリパラメータ）       | 空の場合は 400 を返す（JSONバインドより前に評価。バリデーションエラーとは区別） |
-| display_name          | 必須。空白のみは不可（TrimSpace後に空文字チェック）                |
+| display_name          | 下記の display_name 詳細仕様を参照                      |
 | password              | 必須。8文字以上、英字を1文字以上・数字を1文字以上含むこと               |
 | password_confirmation | 必須。`password` と一致すること                         |
 | agreed_to_terms       | `true` であること                                  |
+
+#### display_name 詳細仕様
+
+- 必須（空白のみは不可）
+- 前後の空白を trim する
+- NFC normalization を適用する（NFKC は行わない）
+- 文字数は rune 数で 3〜30
+- 制御文字禁止（改行・タブを含む U+0000-U+001F、U+007F、U+0080-U+009F）
+- LINE SEPARATOR (U+2028) / PARAGRAPH SEPARATOR (U+2029) 禁止
+- ZWJ (U+200D) は許可
+- その他ゼロ幅文字禁止（U+200B, U+200C, U+FEFF, U+2060-U+2064, U+034F, U+00AD など）
+- 絵文字許可
+- 日本語 / ASCII / 全角文字許可
+- `< > " ' &` などは入力禁止にしない（表示側でエスケープする）
+- reserved words 禁止（下記リスト、大小文字を区別しない、完全一致のみ）
+  - 日本語: 管理者、運営、公式、サポート、システム
+  - 英語: admin, administrator, official, support, system, root
+  - 中国語: 管理员、官方、客服、系统
+- 重複は許可（ユーザIDが内部識別子、display_name はURL識別子に使わない）
+- 登録後の変更不可（immutable）
+- APIレスポンスは raw string を返す（表示側でエスケープする）
 
 ---
 
@@ -554,6 +575,11 @@ Accept-Language: ja
 | USER_ALREADY_REGISTERED      | 409   | メールアドレス重複                 |
 | VALIDATION_ERROR             | 422   | 入力値エラー                    |
 | DISPLAY_NAME_REQUIRED        | 422   | display_name 必須            |
+| DISPLAY_NAME_TOO_SHORT       | 422   | display_name が3文字未満        |
+| DISPLAY_NAME_TOO_LONG        | 422   | display_name が30文字超過       |
+| DISPLAY_NAME_CONTROL_CHAR    | 422   | display_name に制御文字を含む      |
+| DISPLAY_NAME_ZERO_WIDTH      | 422   | display_name に禁止ゼロ幅文字を含む   |
+| DISPLAY_NAME_RESERVED        | 422   | display_name が reserved word  |
 | PASSWORD_REQUIRED            | 422   | password 必須               |
 | PASSWORD_TOO_WEAK            | 422   | パスワード強度不足（8文字以上、英字・数字各1文字以上） |
 | PASSWORD_CONFIRMATION_REQUIRED | 422 | password_confirmation 必須  |

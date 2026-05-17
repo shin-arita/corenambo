@@ -72,6 +72,30 @@ func TestCreate_EmailFormatInvalid(t *testing.T) {
 	}
 }
 
+func TestCreate_EmailWithDisplayNameRejected(t *testing.T) {
+	svc := newTestUserRegistrationService()
+	_, err := svc.Create(context.Background(), CreateUserRegistrationInput{
+		Email:             "Name <user@example.com>",
+		EmailConfirmation: "Name <user@example.com>",
+		Language:          "ja",
+	})
+	if err == nil {
+		t.Fatal("expected error for display-name format email")
+	}
+}
+
+func TestCreate_EmailWithAngleBracketsRejected(t *testing.T) {
+	svc := newTestUserRegistrationService()
+	_, err := svc.Create(context.Background(), CreateUserRegistrationInput{
+		Email:             "<user@example.com>",
+		EmailConfirmation: "<user@example.com>",
+		Language:          "ja",
+	})
+	if err == nil {
+		t.Fatal("expected error for angle-bracket format email")
+	}
+}
+
 func TestCreate_EmailConfirmationNotMatch(t *testing.T) {
 	svc := newTestUserRegistrationService()
 	_, err := svc.Create(context.Background(), CreateUserRegistrationInput{
@@ -540,6 +564,31 @@ func TestVerify_Validation_PasswordMinLength(t *testing.T) {
 	}
 }
 
+func TestVerify_Validation_PasswordTooLong(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.Password = strings.Repeat("a", 72) + "1" // 73バイト: bcrypt上限超え
+	in.PasswordConfirmation = in.Password
+	_, err := svc.Verify(context.Background(), in)
+	if err == nil {
+		t.Fatal("expected validation error for 73-byte password")
+	}
+}
+
+func TestVerify_Validation_PasswordMaxLength(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.Password = strings.Repeat("a", 71) + "1" // 72バイト: bcrypt上限内（英字+数字）
+	in.PasswordConfirmation = in.Password
+	out, err := svc.Verify(context.Background(), in)
+	if err != nil {
+		t.Fatalf("unexpected error for 72-byte password: %v", err)
+	}
+	if out.Code == "" {
+		t.Fatal("expected non-empty code")
+	}
+}
+
 func TestVerify_Validation_AgreedToTermsRequired(t *testing.T) {
 	svc := newVerifyServiceDefault()
 	in := validVerifyInput
@@ -797,6 +846,248 @@ func TestVerify_DisplayNameTrimmed(t *testing.T) {
 	}
 	if out.Code == "" {
 		t.Fatal("expected non-empty code")
+	}
+}
+
+func TestVerify_Validation_DisplayNameTooShort(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.DisplayName = "ab"
+	_, err := svc.Verify(context.Background(), in)
+	if err == nil {
+		t.Fatal("expected validation error for too short display_name")
+	}
+}
+
+func TestVerify_Validation_DisplayNameMinLength(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.DisplayName = "abc"
+	out, err := svc.Verify(context.Background(), in)
+	if err != nil {
+		t.Fatalf("unexpected error for 3-char display_name: %v", err)
+	}
+	if out.Code == "" {
+		t.Fatal("expected non-empty code")
+	}
+}
+
+func TestVerify_Validation_DisplayNameMaxLength(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.DisplayName = strings.Repeat("a", 30)
+	out, err := svc.Verify(context.Background(), in)
+	if err != nil {
+		t.Fatalf("unexpected error for 30-char display_name: %v", err)
+	}
+	if out.Code == "" {
+		t.Fatal("expected non-empty code")
+	}
+}
+
+func TestVerify_Validation_DisplayNameTooLong(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.DisplayName = strings.Repeat("a", 31)
+	_, err := svc.Verify(context.Background(), in)
+	if err == nil {
+		t.Fatal("expected validation error for too long display_name")
+	}
+}
+
+func TestVerify_Validation_DisplayNameNewline(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.DisplayName = "user\nname"
+	_, err := svc.Verify(context.Background(), in)
+	if err == nil {
+		t.Fatal("expected validation error for newline in display_name")
+	}
+}
+
+func TestVerify_Validation_DisplayNameTab(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.DisplayName = "user\tname"
+	_, err := svc.Verify(context.Background(), in)
+	if err == nil {
+		t.Fatal("expected validation error for tab in display_name")
+	}
+}
+
+func TestVerify_Validation_DisplayNameControlChar(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.DisplayName = "user\x01name"
+	_, err := svc.Verify(context.Background(), in)
+	if err == nil {
+		t.Fatal("expected validation error for control char in display_name")
+	}
+}
+
+func TestVerify_Validation_DisplayNameLineSeparator(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.DisplayName = "user name"
+	_, err := svc.Verify(context.Background(), in)
+	if err == nil {
+		t.Fatal("expected validation error for LINE SEPARATOR in display_name")
+	}
+}
+
+func TestVerify_Validation_DisplayNameZeroWidthSpace(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.DisplayName = "user\u200bname"
+	_, err := svc.Verify(context.Background(), in)
+	if err == nil {
+		t.Fatal("expected validation error for ZERO WIDTH SPACE in display_name")
+	}
+}
+
+func TestVerify_Validation_DisplayNameSoftHyphen(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.DisplayName = "user\u00adname"
+	_, err := svc.Verify(context.Background(), in)
+	if err == nil {
+		t.Fatal("expected validation error for SOFT HYPHEN in display_name")
+	}
+}
+
+func TestVerify_Validation_DisplayNameZWJAllowed(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.DisplayName = "usr\u200dnam"
+	out, err := svc.Verify(context.Background(), in)
+	if err != nil {
+		t.Fatalf("unexpected error for ZWJ in display_name: %v", err)
+	}
+	if out.Code == "" {
+		t.Fatal("expected non-empty code")
+	}
+}
+
+func TestVerify_Validation_DisplayNameEmojiAllowed(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.DisplayName = "abc😀def"
+	out, err := svc.Verify(context.Background(), in)
+	if err != nil {
+		t.Fatalf("unexpected error for emoji in display_name: %v", err)
+	}
+	if out.Code == "" {
+		t.Fatal("expected non-empty code")
+	}
+}
+
+func TestVerify_Validation_DisplayNameNFCNormalized(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	// NFD: "か" (U+304B) + combining dakuten (U+3099) = "が" in NFD form
+	// 8 NFD code points but represents valid NFC after normalization
+	in.DisplayName = "abcがabc"
+	out, err := svc.Verify(context.Background(), in)
+	if err != nil {
+		t.Fatalf("unexpected error for NFD display_name: %v", err)
+	}
+	if out.Code == "" {
+		t.Fatal("expected non-empty code")
+	}
+}
+
+func TestVerify_Validation_DisplayNameJapaneseAllowed(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.DisplayName = "コレナンボユーザ"
+	out, err := svc.Verify(context.Background(), in)
+	if err != nil {
+		t.Fatalf("unexpected error for Japanese display_name: %v", err)
+	}
+	if out.Code == "" {
+		t.Fatal("expected non-empty code")
+	}
+}
+
+func TestVerify_Validation_DisplayNameInternalSpaceAllowed(t *testing.T) {
+	svc := newVerifyServiceDefault()
+	in := validVerifyInput
+	in.DisplayName = "user name"
+	out, err := svc.Verify(context.Background(), in)
+	if err != nil {
+		t.Fatalf("unexpected error for display_name with internal space: %v", err)
+	}
+	if out.Code == "" {
+		t.Fatal("expected non-empty code")
+	}
+}
+
+func TestVerify_Validation_DisplayNameReservedJA(t *testing.T) {
+	reserved := []string{"管理者", "運営", "公式", "サポート", "システム"}
+	for _, name := range reserved {
+		svc := newVerifyServiceDefault()
+		in := validVerifyInput
+		in.DisplayName = name
+		_, err := svc.Verify(context.Background(), in)
+		if err == nil {
+			t.Fatalf("expected validation error for reserved display_name %q", name)
+		}
+	}
+}
+
+func TestVerify_Validation_DisplayNameReservedEN(t *testing.T) {
+	reserved := []string{"admin", "administrator", "official", "support", "system", "root"}
+	for _, name := range reserved {
+		svc := newVerifyServiceDefault()
+		in := validVerifyInput
+		in.DisplayName = name
+		_, err := svc.Verify(context.Background(), in)
+		if err == nil {
+			t.Fatalf("expected validation error for reserved display_name %q", name)
+		}
+	}
+}
+
+func TestVerify_Validation_DisplayNameReservedCaseInsensitive(t *testing.T) {
+	cases := []string{"Admin", "ADMIN", "AdMiN", "System", "SYSTEM"}
+	for _, name := range cases {
+		svc := newVerifyServiceDefault()
+		in := validVerifyInput
+		in.DisplayName = name
+		_, err := svc.Verify(context.Background(), in)
+		if err == nil {
+			t.Fatalf("expected validation error for reserved display_name (case variant) %q", name)
+		}
+	}
+}
+
+func TestVerify_Validation_DisplayNameReservedZH(t *testing.T) {
+	reserved := []string{"管理员", "官方", "客服", "系统"}
+	for _, name := range reserved {
+		svc := newVerifyServiceDefault()
+		in := validVerifyInput
+		in.DisplayName = name
+		_, err := svc.Verify(context.Background(), in)
+		if err == nil {
+			t.Fatalf("expected validation error for reserved display_name %q", name)
+		}
+	}
+}
+
+func TestVerify_Validation_DisplayNamePartialReservedAllowed(t *testing.T) {
+	// 部分一致では禁止しない
+	allowed := []string{"adminuser", "myadmin", "system1", "支持admin"}
+	for _, name := range allowed {
+		svc := newVerifyServiceDefault()
+		in := validVerifyInput
+		in.DisplayName = name
+		out, err := svc.Verify(context.Background(), in)
+		if err != nil {
+			t.Fatalf("unexpected error for partial-match display_name %q: %v", name, err)
+		}
+		if out.Code == "" {
+			t.Fatalf("expected non-empty code for %q", name)
+		}
 	}
 }
 
