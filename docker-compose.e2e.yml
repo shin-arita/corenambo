@@ -1,0 +1,65 @@
+services:
+  frontend:
+    container_name: !reset ""
+    ports: !reset []
+    environment:
+      VITE_API_URL: http://api:8080
+      VITE_SERVER_ALLOWED_HOSTS: frontend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:5173/"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  api:
+    container_name: !reset ""
+    ports: !reset []
+    environment:
+      CORS_ALLOW_ORIGIN: http://frontend:5173
+      FRONTEND_BASE_URL: http://frontend:5173
+    healthcheck:
+      # -s で出力抑制、-o /dev/null で破棄。-f 不使用のため 400 も接続確認として成功扱い
+      # TODO: /healthz エンドポイント追加後はそちらに切り替える
+      test: ["CMD-SHELL", "curl -so /dev/null http://localhost:8080/api/v1/user-registrations/verify?token=hc"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 60s
+
+  db:
+    container_name: !reset ""
+    ports: !reset []
+
+  mail:
+    container_name: !reset ""
+    ports: !reset []
+
+  redis:
+    container_name: !reset ""
+    ports: !reset []
+
+  worker:
+    healthcheck:
+      # pgrep -x worker: worker バイナリのプロセス起動を確認（ファイル存在だけでなくプロセス稼働を保証）
+      test: ["CMD-SHELL", "pgrep -x worker > /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 60s
+
+  e2e:
+    build:
+      context: ./e2e
+      dockerfile: Dockerfile
+    image: corenambo-e2e:1.0.0
+    command: npx playwright test
+    depends_on:
+      frontend:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      mail:
+        condition: service_started
+      worker:
+        condition: service_healthy

@@ -121,11 +121,12 @@ export default function UserRegistrationPage() {
 
           <form onSubmit={handleSubmit} noValidate>
             <div className="mb-5">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
                 メールアドレス
                 <span className="ml-1.5 text-xs font-normal text-red-400">必須</span>
               </label>
               <input
+                id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -142,11 +143,12 @@ export default function UserRegistrationPage() {
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="emailConfirmation" className="block text-sm font-medium text-slate-700 mb-1">
                 メールアドレス（確認）
                 <span className="ml-1.5 text-xs font-normal text-red-400">必須</span>
               </label>
               <input
+                id="emailConfirmation"
                 type="email"
                 value={emailConfirmation}
                 onChange={(e) => setEmailConfirmation(e.target.value)}

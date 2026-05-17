@@ -1,4 +1,4 @@
-.PHONY: up restart build rebuild down logs ps db api front migrate-up migrate-down test test-cover test-db-setup fmt lint frontend-lint frontend-test frontend-typecheck audit check
+.PHONY: up restart build rebuild down logs ps db api front migrate-up migrate-down test test-cover test-db-setup fmt lint frontend-lint frontend-test frontend-typecheck audit check e2e
 
 up:
 	docker compose up -d
@@ -74,3 +74,14 @@ check:
 	make frontend-lint
 	make frontend-test
 	make frontend-typecheck
+
+e2e:
+	@set -e; \
+	export COMPOSE_PROJECT_NAME=corenambo-e2e; \
+	trap 'docker compose -f docker-compose.yml -f docker-compose.e2e.yml down -v --remove-orphans' EXIT; \
+	docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --wait db redis mail; \
+	docker compose -f docker-compose.yml -f docker-compose.e2e.yml run --rm api \
+		sh -lc 'migrate -path /db/migrations -database "$$DATABASE_URL" up'; \
+	docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --wait frontend api worker; \
+	docker compose -f docker-compose.yml -f docker-compose.e2e.yml build e2e; \
+	docker compose -f docker-compose.yml -f docker-compose.e2e.yml run --rm e2e
