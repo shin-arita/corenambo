@@ -164,12 +164,21 @@ router.Use(gin.CustomRecovery(func(c *gin.Context, recovered any) {
 メール送信を API のリクエストパスから完全に切り離す。
 
 ```
-API  ──→  DB (mail_outboxes INSERT)  ──→  202 レスポンス返却
+API  ──→  DB transaction (user_registration_requests INSERT + mail_outboxes INSERT)  ──→  201 Created レスポンス返却
 Worker  ──→  mail_outboxes FETCH  ──→  SMTP 送信
 ```
 
 - API はメール送信の完了を待たずにレスポンスを返すため、SMTP レイテンシの影響を受けない
 - ワーカーが落ちていてもデータは DB に残り、再起動後に送信される
+
+**設計上の判断:**
+
+| 判断 | 内容 |
+|------|------|
+| DB トランザクション内で outbox 作成 | `user_registration_requests` INSERT と `mail_outboxes` INSERT を同一トランザクションで実行。API が 201 を返した時点で必ずメールが送られることを保証する |
+| at-least-once 配信 | worker は SMTP 送信成功後に `MarkSent` を呼ぶ。`MarkSent` が失敗した場合、レコードは `processing` のまま stuck timeout（デフォルト 15 分）後に `pending` に戻り、再送される。同一トークンの URL が複数回送信される可能性がある |
+| 重複送信の許容 | 確認メールの重複送信はユーザ体験上問題が小さく、2 通届いても正しい方でそのまま本登録できる。確認メールは冪等性を前提とした通知として扱う |
+| payload clear | worker が SMTP 送信に成功した時点で `payload = '{}'` に上書きする。DB が漏洩しても平文 URL（トークン含む）が残存しないようにするため |
 
 ### 2. UUIDv7 による時系列順 ID
 

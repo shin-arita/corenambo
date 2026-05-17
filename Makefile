@@ -1,4 +1,4 @@
-.PHONY: up restart build rebuild down logs ps db api front migrate-up migrate-down test test-cover test-db-setup fmt lint frontend-lint frontend-test frontend-typecheck audit check e2e
+.PHONY: up restart build rebuild down destroy logs ps db api front migrate-up migrate-down test test-cover test-db-setup fmt lint frontend-lint frontend-test frontend-typecheck audit check e2e
 
 up:
 	docker compose up -d
@@ -14,6 +14,9 @@ rebuild:
 
 down:
 	docker compose down
+
+destroy:
+	docker compose down -v
 
 logs:
 	docker compose logs -f
@@ -51,7 +54,7 @@ test-db-setup:
 	docker compose exec api sh -lc 'migrate -path /db/migrations -database "postgres://app_user:password@db:5432/app_db_test?sslmode=disable" up'
 
 fmt:
-	docker compose exec api sh -lc 'gofmt -w $$(find . -name "*.go" -not -path "./tmp/*")'
+	docker compose exec api sh -lc 'PATH="/usr/local/go/bin:$$PATH" gofmt -w $$(find . -name "*.go" -not -path "./tmp/*")'
 
 lint:
 	docker compose exec api golangci-lint run
