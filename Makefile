@@ -1,4 +1,4 @@
-.PHONY: up restart build rebuild down destroy logs ps db api front migrate-up migrate-down test test-cover test-db-setup fmt lint frontend-lint frontend-test frontend-typecheck audit check e2e
+.PHONY: up restart build rebuild down destroy logs ps db api front migrate-up migrate-down test test-cover test-db-setup fmt lint frontend-lint frontend-test frontend-typecheck audit check govulncheck e2e
 
 up:
 	docker compose up -d
@@ -70,6 +70,9 @@ frontend-typecheck:
 
 audit:
 	docker compose exec frontend npm audit
+
+govulncheck:
+	docker compose exec api sh -lc 'PATH="/usr/local/go/bin:/go/bin:$$PATH" && go install golang.org/x/vuln/cmd/govulncheck@v1.3.0 && /go/bin/govulncheck ./...'
 
 check:
 	make lint
