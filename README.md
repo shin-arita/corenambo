@@ -10,6 +10,8 @@
 
 この「下がる価格」と「競合による上昇」のバランスが、従来のECとは異なる価値を生み出します。
 
+設計判断の詳細を先に確認したい場合は、[ドキュメント索引](docs/index.md) の「最初に読むべき docs」から読むのがおすすめです。
+
 ---
 
 ## 価格変動とホールドのイメージ
@@ -58,24 +60,67 @@ sequenceDiagram
 
 ---
 
-## 技術的な特徴
+## 設計上の見どころ
 
-本サービスでは以下のような設計課題を扱っています。
+会員登録フローひとつをとっても、以下のような設計判断が含まれています。
 
-- 同時購入・同時ホールド時の競合制御
-- 二重購入防止（冪等性）
-- トランザクション設計
-- 状態変化の管理
-- Outbox Pattern によるメール送信
+### トークンを平文で保存しない
+
+確認メールに含める本登録トークンは、`user_registration_requests` には SHA-256 ハッシュ値のみ保存します。
+このテーブルが漏洩しても、本登録 URL や生トークンは復元できません。
+ただし送信前・送信中は `mail_outboxes.payload` に平文 URL が一時的に入ります。
+送信後は `payload = '{}'` で上書きし、平文 URL をDBから削除します（payload clear）。
+
+### Outbox Pattern によるメール送信
+
+SMTP をトランザクション外で直送すると、「DB にレコードはあるがメールが届かない」状態が起きます。
+どのレコードが未送信かを後から特定する手段がなく、手動再送も困難です。
+
+Outbox Pattern では、仮登録レコードの挿入と送信ジョブの挿入を同一トランザクションにまとめます。
+「仮登録が成功した = 送信ジョブも存在する」が保証され、SMTP 障害は worker の再試行で吸収できます。
+
+### リトライの分類と stuck recovery
+
+SMTP 接続エラーとテンプレートの parse 失敗を同じ処理にすると問題が起きます。
+前者は数分後に回復しますが、後者は何度再試行しても成功しません。
+
+失敗を 4 種類に分類し、それぞれ異なる遷移を取ります。
+また、worker が SMTP 送信成功後にクラッシュすると `status='processing'` のまま永続するレコード（stuck mail）が残ります。
+15 分後に自動でリカバリし、再送されるよう設計しています。
+
+### at-least-once delivery と冪等性
+
+SMTP プロトコルには「送信済みか確認する」機能がありません。
+worker が SMTP 成功後・DB 書き込み前にクラッシュすると、同じメールが再送される可能性があります。
+確認メールの重複は設計上明示的に許容しています（同じメールが 2 通届いても機能的な障害にはならない）。
+
+一方、本登録（ユーザ作成）は `FOR UPDATE` + `verified_at` チェック + `user_emails` UNIQUE 制約の 3 層で二重作成を防止します。
+
+### Docker isolated E2E
+
+E2E テストは専用の Docker Compose プロジェクトで実行します。
+dev 環境が起動中でも停止中でも実行でき、ホストのポート競合が起きません。
+テスト終了後はボリュームごと削除するため、テストデータは蓄積しません。
+Playwright から Mailpit REST API をポーリングしてメール到着を確認します。
+
+### Quality Gate
+
+`make fmt` / `make lint` / `make test-cover`（カバレッジ 100%）/ `make frontend-lint` / `make frontend-test` / `make frontend-typecheck` / `make e2e` が全通過することを完了条件とします。
 
 ---
 
-## セキュリティ
+## ドキュメント
 
-- トークンのハッシュ保存
-- メール存在隠蔽
-- レート制限
-- ログの安全管理
+設計の背景・判断の根拠は docs に記録しています。
+
+- [ドキュメント索引](docs/index.md)
+
+### 設計を深く読みたい方へ（おすすめ読書順）
+
+1. [Outbox Pattern 採用理由](docs/architecture/outbox_pattern_decision.md) — なぜ SMTP 直送を避けたか
+2. [リトライ戦略](docs/architecture/retry_strategy_decision.md) — 失敗の分類と stuck mail 対策
+3. [at-least-once delivery と冪等性](docs/architecture/at_least_once_and_idempotency.md) — exactly-once を諦めた理由
+4. [セキュリティ・性能設計](docs/user_registration/security_and_performance.md) — 19 項目の実装レベル対策
 
 ---
 

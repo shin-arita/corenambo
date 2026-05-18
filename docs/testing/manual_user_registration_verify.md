@@ -4,16 +4,16 @@
 
 1. [テスト環境](#1-テスト環境)
 2. [前提条件](#2-前提条件)
-3. [事前準備 — tokenの取得](#3-事前準備--tokenの取得)
+3. [事前準備 — トークンの取得](#3-事前準備--トークンの取得)
 4. [正常系 — GETトークン確認API](#4-正常系--getトークン確認api)
 5. [正常系 — 本登録完了](#5-正常系--本登録完了)
-6. [異常系 — tokenなし・token不正](#6-異常系--tokenなしtoken不正)
-7. [異常系 — token期限切れ](#7-異常系--token期限切れ)
-8. [異常系 — token使用済み](#8-異常系--token使用済み)
+6. [異常系 — トークンなし・トークン不正](#6-異常系--トークンなしトークン不正)
+7. [異常系 — トークン期限切れ](#7-異常系--トークン期限切れ)
+8. [異常系 — トークン使用済み](#8-異常系--トークン使用済み)
 9. [異常系 — メール重複（USER_ALREADY_REGISTERED）](#9-異常系--メール重複user_already_registered)
 10. [異常系 — バリデーションエラー](#10-異常系--バリデーションエラー)
 11. [異常系 — レートリミット](#11-異常系--レートリミット)
-12. [セキュリティ確認 — tokenマスク](#12-セキュリティ確認--tokenマスク)
+12. [セキュリティ確認 — トークンマスク](#12-セキュリティ確認--トークンマスク)
 13. [APIログ確認](#13-apiログ確認)
 14. [確認観点まとめ](#14-確認観点まとめ)
 
@@ -50,9 +50,9 @@ docker compose exec db psql -U postgres -d app_db
 
 ---
 
-## 3. 事前準備 — tokenの取得
+## 3. 事前準備 — トークンの取得
 
-本会員登録テストには有効なtokenが必要である。以下の手順でtokenを取得する。
+本会員登録テストには有効なトークンが必要である。以下の手順でトークンを取得する。
 
 ### 手順
 
@@ -76,7 +76,7 @@ MSG_ID=$(curl -s http://localhost:8025/api/v1/messages \
 echo "Message ID: ${MSG_ID}"
 ```
 
-3. メール本文からtokenを抽出する。
+3. メール本文からトークンを抽出する。
 
 ```bash
 # メール本文を取得してtokenを表示する
@@ -91,7 +91,7 @@ print(match.group(1) if match else 'NOT FOUND')
 echo "Token: ${TOKEN}"
 ```
 
-4. 取得したtokenを環境変数に設定する。
+4. 取得したトークンを環境変数に設定する。
 
 ```bash
 export VERIFY_TOKEN="${TOKEN}"
@@ -102,7 +102,7 @@ echo "VERIFY_TOKEN=${VERIFY_TOKEN}"
 
 ## 4. 正常系 — GETトークン確認API
 
-### TC-VER-001 — 有効tokenでGETが成功すること
+### TC-VER-001 — 有効なトークンでGETが成功すること
 
 #### API確認
 
@@ -126,7 +126,7 @@ curl -s -w "\nHTTP: %{http_code}\n" \
 
 #### 手順
 
-1. 同じtokenで3回GETを実行する。
+1. 同じトークンで3回GETを実行する。
 
 ```bash
 for i in 1 2 3; do
@@ -163,7 +163,7 @@ WHERE email = 'verify01@example.com';
 http://localhost:5173/registration/verify?token={VERIFY_TOKEN}
 ```
 
-（`{VERIFY_TOKEN}` は手順3で取得した実際のtokenで置き換える。）
+（`{VERIFY_TOKEN}` は手順3で取得した実際のトークンで置き換える。）
 
 2. 「確認中...」が一瞬表示された後、本会員登録フォームが表示されることを確認する。
 
@@ -272,13 +272,13 @@ WHERE email = 'verify01@example.com';
 
 ---
 
-## 6. 異常系 — tokenなし・token不正
+## 6. 異常系 — トークンなし・トークン不正
 
-### TC-VER-201 — tokenパラメータなしでアクセスする
+### TC-VER-201 — トークンパラメータなしでアクセスする
 
 #### 画面操作
 
-1. ブラウザで http://localhost:5173/registration/verify を開く（tokenなし）。
+1. ブラウザで http://localhost:5173/registration/verify を開く（トークンなし）。
 
 #### 期待結果（画面）
 
@@ -310,7 +310,7 @@ curl -s -w "\nHTTP: %{http_code}\n" \
 
 ---
 
-### TC-VER-202 — 存在しないtokenでアクセスする
+### TC-VER-202 — 存在しないトークンでアクセスする
 
 #### 画面操作
 
@@ -348,13 +348,13 @@ curl -s -w "\nHTTP: %{http_code}\n" \
 
 ---
 
-## 7. 異常系 — token期限切れ
+## 7. 異常系 — トークン期限切れ
 
-### TC-VER-301 — 期限切れtokenでアクセスする
+### TC-VER-301 — 期限切れトークンでアクセスする
 
 #### 手順
 
-1. 有効なtokenを取得する（手順3参照）。
+1. 有効なトークンを取得する（手順3参照）。
 2. DBで `expires_at` を過去に設定する。
 
 ```sql
@@ -363,7 +363,7 @@ SET expires_at = NOW() - INTERVAL '1 hour'
 WHERE email = 'verify01@example.com';
 ```
 
-3. 期限切れtokenでアクセスする。
+3. 期限切れトークンでアクセスする。
 
 ```bash
 # GET（期限切れtoken）
@@ -387,15 +387,15 @@ curl -s -w "\nHTTP: %{http_code}\n" \
 
 ---
 
-## 8. 異常系 — token使用済み
+## 8. 異常系 — トークン使用済み
 
-### TC-VER-401 — 使用済みtokenでGETアクセスする
+### TC-VER-401 — 使用済みトークンでGETアクセスする
 
 **前提：** TC-VER-101 で本登録を完了していること（`verified_at IS NOT NULL`）。
 
 #### 画面操作
 
-1. ブラウザで使用済みtokenのURLを開く。
+1. ブラウザで使用済みトークンのURLを開く。
 
 ```
 http://localhost:5173/registration/verify?token={使用済みのVERIFY_TOKEN}
@@ -427,7 +427,7 @@ curl -s -w "\nHTTP: %{http_code}\n" \
 
 ---
 
-### TC-VER-402 — 使用済みtokenでPOSTアクセスする
+### TC-VER-402 — 使用済みトークンでPOSTアクセスする
 
 #### API確認
 
@@ -466,7 +466,7 @@ curl -s -w "\nHTTP: %{http_code}\n" \
 
 #### 手順
 
-1. DB上で別の `user_registration_requests` レコードを直接作成し、有効なtokenを設定する。
+1. DB上で別の `user_registration_requests` レコードを直接作成し、有効なトークンを設定する。
 
 ```sql
 -- 既存の user_emails に登録済みメールの別仮登録レコードを確認する
@@ -476,7 +476,7 @@ LEFT JOIN user_emails ue ON LOWER(urr.email) = LOWER(ue.email)
 WHERE ue.email IS NOT NULL;
 ```
 
-2. 有効なtokenでPOSTを送信する（DB上で verified_at が NULL のレコード）。
+2. 有効なトークンでPOSTを送信する（DB上で verified_at が NULL のレコード）。
 
 #### API確認
 
@@ -510,7 +510,7 @@ curl -s -w "\nHTTP: %{http_code}\n" \
 
 ## 10. 異常系 — バリデーションエラー
 
-以下のテストはすべて有効なtokenを使用する。事前に手順3でtokenを取得すること。
+以下のテストはすべて有効なトークンを使用する。事前に手順3でトークンを取得すること。
 
 ### TC-VER-601 — 表示名が未入力
 
@@ -786,9 +786,9 @@ done
 
 ---
 
-## 12. セキュリティ確認 — tokenマスク
+## 12. セキュリティ確認 — トークンマスク
 
-### TC-VER-801 — URLからtokenが除去されること
+### TC-VER-801 — URLからトークンが除去されること
 
 #### 画面操作
 
@@ -803,11 +803,11 @@ http://localhost:5173/registration/verify?token={VERIFY_TOKEN}
 #### 期待結果
 
 - アドレスバーのURLが `http://localhost:5173/registration/verify` になること（`?token=...` が消えること）。
-- ブラウザの履歴にtokenが残らないこと（`history.replaceState` によるURLクリーニング）。
+- ブラウザの履歴にトークンが残らないこと（`history.replaceState` によるURLクリーニング）。
 
 ---
 
-### TC-VER-802 — tokenがブラウザ画面上に表示されないこと
+### TC-VER-802 — トークンがブラウザ画面上に表示されないこと
 
 #### 画面操作
 
@@ -817,11 +817,11 @@ http://localhost:5173/registration/verify?token={VERIFY_TOKEN}
 #### 期待結果
 
 - ページソースに `token=` が含まれないこと。
-- tokenの値がHTMLに埋め込まれていないこと。
+- トークンの値がHTMLに埋め込まれていないこと。
 
 ---
 
-### TC-VER-803 — ログにtokenが出力されないこと
+### TC-VER-803 — ログにトークンが出力されないこと
 
 #### 手順
 
@@ -837,7 +837,7 @@ docker compose logs -f api
 
 | 観点 | 確認内容 |
 |------|----------|
-| token漏洩 | ログに平文tokenが含まれないこと |
+| トークン漏洩 | ログに平文トークンが含まれないこと |
 | password漏洩 | ログにpasswordが含まれないこと |
 | password_hash漏洩 | ログにbcryptハッシュが含まれないこと |
 | 「You trusted all proxies」 | この警告が出ていないこと |
@@ -849,7 +849,7 @@ docker compose logs api 2>&1 | grep -i "trusted all proxies" | wc -l
 # 0 であること
 ```
 
-**tokenがログに出力されていないことの確認：**
+**トークンがログに出力されていないことの確認：**
 
 ```bash
 # VERIFY_TOKENの値をログ内で検索する（存在しないこと）
@@ -865,7 +865,7 @@ docker compose logs api 2>&1 | grep -c "${VERIFY_TOKEN}"
 
 - 400/422/429 エラーレスポンスに `cause` フィールドが含まれないこと。
 - 500 エラー時もレスポンスに `cause` は含まれないこと（ログにのみ出力される）。
-- tokenが存在しない場合と、ハッシュ不一致の場合で同一エラーコード（`INVALID_REGISTRATION_TOKEN`）が返ること。
+- トークンが存在しない場合と、ハッシュ不一致の場合で同一エラーコード（`INVALID_REGISTRATION_TOKEN`）が返ること。
 
 ---
 
@@ -920,7 +920,7 @@ docker compose logs api 2>&1 | grep "TOO_MANY_REQUESTS"
 #### 確認観点
 
 - `code=TOO_MANY_REQUESTS` がログに出力されること。
-- tokenがログに含まれないこと。
+- トークンがログに含まれないこと。
 
 ---
 
@@ -933,11 +933,11 @@ docker compose logs api 2>&1 | grep "TOO_MANY_REQUESTS"
 | GET正常系 | 画面アクセス時にGETが呼ばれフォームが表示されること | TC-VER-003 |
 | POST正常系 | 201とUSER_REGISTRATION_VERIFIEDが返ること | TC-VER-101 |
 | POST正常系 | 送信中にボタンが無効化されること | TC-VER-102 |
-| tokenなし | tokenなしで400が返ること | TC-VER-201 |
-| token不正 | 存在しないtokenで400が返ること | TC-VER-202 |
-| token期限切れ | 期限切れtokenで400が返ること | TC-VER-301 |
-| token使用済み | 使用済みtokenで409（USED）が返ること | TC-VER-401 |
-| token使用済み | 使用済みtokenでPOSTしても409が返ること | TC-VER-402 |
+| トークンなし | トークンなしで400が返ること | TC-VER-201 |
+| トークン不正 | 存在しないトークンで400が返ること | TC-VER-202 |
+| トークン期限切れ | 期限切れトークンで400が返ること | TC-VER-301 |
+| トークン使用済み | 使用済みトークンで409（USED）が返ること | TC-VER-401 |
+| トークン使用済み | 使用済みトークンでPOSTしても409が返ること | TC-VER-402 |
 | メール重複 | USER_ALREADY_REGISTEREDで409が返ること | TC-VER-501 |
 | バリデーション | 表示名未入力で422が返ること | TC-VER-601 |
 | バリデーション | パスワード未入力で422が返ること | TC-VER-602 |
@@ -946,14 +946,14 @@ docker compose logs api 2>&1 | grep "TOO_MANY_REQUESTS"
 | バリデーション | 利用規約未同意で422が返ること | TC-VER-605 |
 | レートリミット | GET/POSTで共有カウンタにより429が返ること | TC-VER-701 |
 | レートリミット | GETとPOSTのカウンタが共有されること | TC-VER-702 |
-| セキュリティ | URLからtokenが除去されること | TC-VER-801 |
-| セキュリティ | tokenが画面に表示されないこと | TC-VER-802 |
-| セキュリティ | tokenがログに出力されないこと | TC-VER-803 |
+| セキュリティ | URLからトークンが除去されること | TC-VER-801 |
+| セキュリティ | トークンが画面に表示されないこと | TC-VER-802 |
+| セキュリティ | トークンがログに出力されないこと | TC-VER-803 |
 | セキュリティ | 「You trusted all proxies」が出ないこと | TC-VER-803 |
 | セキュリティ | エラーレスポンスに内部情報が含まれないこと | TC-VER-804 |
 | ログ | 正常時のログフォーマットが正しいこと | TC-VER-901 |
 | ログ | エラー時のcauseが4xxで出力されないこと | TC-VER-902 |
-| ログ | レートリミット超過時にtokenがログに出ないこと | TC-VER-903 |
+| ログ | レートリミット超過時にトークンがログに出ないこと | TC-VER-903 |
 
 ---
 
@@ -962,4 +962,4 @@ docker compose logs api 2>&1 | grep "TOO_MANY_REQUESTS"
 > TC-VER-003の「確認中...」表示確認は `page.waitForSelector('[text="確認中..."]')` に対応する。
 > TC-VER-801のURLクリーニングは `expect(page.url()).not.toContain('token=')` に対応する。
 > curl確認ブロックは E2E には含めず、API単体テストとして分離する。
-> tokenの取得は `手順3. 事前準備` を Playwright の `beforeAll` フックで実装する。
+> トークンの取得は `手順3. 事前準備` を Playwright の `beforeAll` フックで実装する。

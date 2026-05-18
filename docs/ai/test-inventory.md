@@ -140,7 +140,7 @@
 
 ---
 
-## 7. サービス層（token hash保存・mail_outbox payload）
+## 7. サービス層（`token_hash` 保存・mail_outbox payload）
 
 **ファイル:** `api/internal/service/user_registration_service_test.go`（57件）
 

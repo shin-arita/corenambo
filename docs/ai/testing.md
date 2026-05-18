@@ -1,5 +1,30 @@
 # テスト方針
 
+## テスト設計の考え方
+
+「CI を通すためのテスト」ではなく「再現性のある動作確認」を目的として設計しています。
+
+### flaky test を避ける
+
+E2E テストは専用の Docker Compose プロジェクト（`COMPOSE_PROJECT_NAME=corenambo-e2e`）で dev 環境と完全に分離して実行します。
+dev 環境が起動中でも停止中でも結果が変わらず、ホストのポート競合も起きません。
+テスト終了後はボリュームごと削除するため、前回のテストデータが今回の結果に影響しません。
+
+### Mailpit polling を使う理由
+
+E2E テストでは `mail_outboxes.payload` ではなく Mailpit REST API からメールを取得します。
+worker はメール送信後に `payload` を `'{}'` で上書きします（payload clear）。
+`payload` から取得しようとすると、テスト実行のタイミング次第で取れないことがあります。
+Mailpit API を 1 秒間隔でポーリングすることで、送信完了後のメールを確実に取得できます。
+
+### Quality Gate の目的
+
+カバレッジ 100% は「未テストのコードをなくすこと」が目的です。
+実装と同時にテストを書くことで、後から「テストしにくいコード」が増えることを防ぎます。
+`make fmt` / `make lint` / `make frontend-typecheck` など、動作確認以外のチェックコマンドは「動くコード」だけでなく「読めるコード」を維持するために設けています。
+
+---
+
 ## 必須要件
 
 - カバレッジ100%
@@ -52,7 +77,11 @@ make test-db-setup
 
 ### 実行
 
-docker compose exec api go test ./... -cover
+```bash
+make fmt
+make lint
+make test-cover
+```
 
 ### ルール
 
@@ -79,8 +108,11 @@ docker compose exec api go test ./... -cover
 
 ### 実行
 
-docker compose exec frontend npm run lint
-docker compose exec frontend npm run test -- --coverage
+```bash
+make frontend-lint
+make frontend-test
+make frontend-typecheck
+```
 
 ### ルール
 
@@ -96,92 +128,64 @@ docker compose exec frontend npm run test -- --coverage
 
 ユーザ登録フロー（仮登録 → 本登録 → DB反映確認）
 
-### スクリプト
+### 実行
 
 ```bash
+make e2e
+```
+
+`make e2e` は専用の Docker Compose プロジェクト（`COMPOSE_PROJECT_NAME=corenambo-e2e`）を起動し、Playwright コンテナ内でテストを実行する。dev 環境の起動状態に関係なく単独で実行できる。終了時にコンテナ・ボリュームを自動削除する。
+
+### 補助スクリプト（手動確認用）
+
+`scripts/e2e_user_registration.sh` は curl ベースの API レベル確認スクリプトで、`make e2e` からは呼ばれない。手動でのデバッグや補助確認に使用する旧手順であり、標準手順ではない。
+
+使用する場合は dev 環境が起動済みであること。
+
+```bash
+# 手動確認の場合のみ
+docker compose up -d db api redis worker mail
 bash scripts/e2e_user_registration.sh
 ```
 
-### 前提条件
+### テストファイル
 
-以下のコンテナが起動済みであること。
-
-```bash
-docker compose up -d db api redis worker mail
+```
+e2e/tests/user_registration.spec.js
 ```
 
-### テストケース（全 20 項目）
+### テストケース（現在 1 件）
 
-#### テスト 1: 正常系（仮登録 → 本登録 → DB検証）
-
-| ステップ | 検証内容 |
+| テスト | 検証内容 |
 |--------|--------|
-| 仮登録 POST /api/v1/user-registration-requests | HTTP 201 / code=USER_REGISTRATION_REQUEST_CREATED |
-| DB確認 | user_registration_requests に1件作成されていること |
-| トークン取得 | Mailpit API からメール本文のトークンを抽出できること |
-| 本登録 POST /api/v1/user-registrations/verify?token={token} | HTTP 201 / code=USER_REGISTRATION_VERIFIED |
-| DB確認 users | users テーブルに1件作成されていること |
-| DB確認 user_emails | is_primary=true であること |
-| DB確認 user_emails | verified_at がセットされていること |
-| DB確認 user_credentials | 1件作成されていること |
-| DB確認 user_credentials | password_hash が非空であること |
-| DB確認 user_registration_requests | verified_at がセットされていること |
-
-#### テスト 2: 異常系 — トークン不正
-
-| 検証内容 |
-|--------|
-| HTTP 400 |
-| code=INVALID_REGISTRATION_TOKEN |
-
-#### テスト 3: 異常系 — トークン期限切れ
-
-| 検証内容 |
-|--------|
-| DBの expires_at を過去に更新（created_at / expires_at 制約を満たすよう両方更新） |
-| HTTP 400 |
-| code=EXPIRED_REGISTRATION_TOKEN |
-
-#### テスト 4: 異常系 — トークン使用済み
-
-| 検証内容 |
-|--------|
-| 同一トークンで2回 Verify を呼び出す |
-| 1回目 HTTP 201 |
-| 2回目 HTTP 409 |
-| code=USED_REGISTRATION_TOKEN |
+| 仮登録正常系：フォーム送信 → 完了画面遷移 → メール到着 → token確認 | フォーム送信 → 完了ページ表示 → Mailpit にメール到着 → 本文に `/registration/verify` と `token=` が含まれること |
 
 ### トークン取得の仕組み
 
-仮登録 API 呼び出し後、worker が約 1 秒以内にメールを送信し `mail_outboxes.payload` を `'{}'` に上書きする。  
-そのため `mail_outboxes` ではなく Mailpit REST API からトークンを取得する。
+仮登録 API 呼び出し後、worker が約 1 秒以内にメールを送信し `mail_outboxes.payload` を `'{}'` に上書きする。
+そのため `mail_outboxes` ではなく Mailpit REST API からメールを取得する。
 
-```bash
-# メッセージIDを検索
-curl "http://localhost:8025/api/v1/messages?query=to%3A{encoded_email}"
+Playwright では `pollForEmail()` ヘルパーが 1 秒間隔で最大 30 秒 Mailpit API をポーリングし、テスト開始以降に届いたメールを確認する。
 
-# メール本文からトークンを抽出
-curl "http://localhost:8025/api/v1/message/{msg_id}" \
-  | grep -o '"Text":"[^"]*"' \
-  | grep -o 'token=[^\\]*' \
-  | sed 's/token=//'
+```javascript
+// e2e/tests/user_registration.spec.js（概要）
+const res = await apiContext.get(
+  `${MAILPIT_API}/search?query=${encodeURIComponent('to:' + toEmail)}&limit=10`
+);
+// 取得したメッセージIDで本文を取得
+const msgRes = await apiContext.get(`${MAILPIT_API}/message/${message.ID}`);
 ```
 
 ### クリーンアップ
 
-スクリプト実行前に以下を自動実行する。
+`make e2e` は `trap` により成功・失敗問わず終了時に以下を実行する。
 
 ```bash
-# Redis レートリミットキーを全削除
-docker compose exec -T redis redis-cli \
-  EVAL "local keys = redis.call('keys', 'rate_limit:*'); if #keys > 0 then return redis.call('del', unpack(keys)) else return 0 end" 0
-
-# Mailpit のメッセージを全削除
-curl -X DELETE http://localhost:8025/api/v1/messages
+docker compose -f docker-compose.yml -f docker-compose.e2e.yml down -v --remove-orphans
 ```
 
-各テスト終了後に DB のテストデータ（users / user_emails / user_credentials / user_registration_requests / mail_outboxes）を削除する。
+DB ボリュームが毎回削除・再作成されるため、テストデータは蓄積しない。
 
 ### 結果
 
-PASS=20 / FAIL=0（2026-05-10 確認済み）
+1 passed（2026-05-18 確認済み）

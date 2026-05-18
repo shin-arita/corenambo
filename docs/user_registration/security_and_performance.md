@@ -175,8 +175,8 @@ Worker  ──→  mail_outboxes FETCH  ──→  SMTP 送信
 
 | 判断 | 内容 |
 |------|------|
-| DB トランザクション内で outbox 作成 | `user_registration_requests` INSERT と `mail_outboxes` INSERT を同一トランザクションで実行。API が 201 を返した時点で必ずメールが送られることを保証する |
-| at-least-once 配信 | worker は SMTP 送信成功後に `MarkSent` を呼ぶ。`MarkSent` が失敗した場合、レコードは `processing` のまま stuck timeout（デフォルト 15 分）後に `pending` に戻り、再送される。同一トークンの URL が複数回送信される可能性がある |
+| DB トランザクション内で outbox 作成 | `user_registration_requests` INSERT と `mail_outboxes` INSERT を同一トランザクションで実行。API が 201 を返した時点で保証できるのは「送信ジョブが DB に永続化されたこと」のみ。実送信は worker が非同期に行い、SMTP 失敗・non-retryable エラー・リトライ上限到達により最終的に送信されない可能性がある |
+| at-least-once 配信 | worker は SMTP 送信成功後に `MarkSent` を呼ぶ。`MarkSent` が失敗した場合、レコードは `processing` のまま stuck recovery（デフォルト 15 分後）で `pending` に戻り、再送される。同一トークンの URL が複数回送信される可能性がある |
 | 重複送信の許容 | 確認メールの重複送信はユーザ体験上問題が小さく、2 通届いても正しい方でそのまま本登録できる。確認メールは冪等性を前提とした通知として扱う |
 | payload clear | worker が SMTP 送信に成功した時点で `payload = '{}'` に上書きする。DB が漏洩しても平文 URL（トークン含む）が残存しないようにするため |
 
@@ -226,7 +226,7 @@ fetch と status 更新を 1 クエリで実行する。
 | `(status, next_attempt_at)` | ワーカーの pending フェッチ高速化 |
 | `(expires_at)` | 期限切れレコードの削除バッチ |
 | `(verified_at)` | 認証済みユーザの絞り込み |
-| `(created_at)` on mail_outboxes | 送信順序の保証 |
+| `(created_at)` on mail_outboxes | ORDER BY created_at による取得順序の安定化 |
 
 ### 6. 再送間隔をサービス層で制御
 
@@ -328,21 +328,21 @@ worker がメール送信に成功した後、`payload` フィールドを `'{}'
 
 ### 17. E2EテストでMailpitからトークンを取得する理由
 
-```bash
-# scripts/e2e_user_registration.sh
-get_token_from_mailpit() {
-  ...
-  curl -s "${MAILPIT_URL}/api/v1/message/${msg_id}" | \
-    grep -o '"Text":"[^"]*"' | grep -o 'token=[^\\]*' | ...
-}
-```
-
 `mail_outboxes.payload` ではなく Mailpit API を使用する理由：
 
 - worker は仮登録 API 呼び出しから約 1 秒以内にメール送信を完了する
 - 送信後、`mail_outboxes.payload` は `'{}'` に上書きされる（設計 §16 参照）
 - そのため E2E テスト実行時点では `payload` からトークンを取得できない
-- Mailpit の REST API（`GET /api/v1/messages`, `GET /api/v1/message/{id}`）を通じて送信済みメールのテキスト本文を取得し、URL中のトークンを抽出する
+
+Playwright E2E テスト（`e2e/tests/user_registration.spec.js`）では `pollForEmail()` ヘルパーが Mailpit REST API を 1 秒間隔で最大 30 秒ポーリングし、送信済みメールのテキスト本文からトークンを取得する。
+
+```javascript
+// e2e/tests/user_registration.spec.js
+const res = await apiContext.get(
+  `${MAILPIT_API}/search?query=${encodeURIComponent('to:' + toEmail)}&limit=10`
+);
+const msgRes = await apiContext.get(`${MAILPIT_API}/message/${message.ID}`);
+```
 
 ---
 

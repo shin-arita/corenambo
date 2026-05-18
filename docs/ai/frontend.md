@@ -40,5 +40,5 @@ docker compose exec frontend npm run test -- --coverage
 
 ## セキュリティ
 
-- tokenをログ出力しない
-- URLに含まれるtokenもログ出力しない
+- トークンをログ出力しない
+- URLに含まれるトークンもログ出力しない

@@ -239,6 +239,6 @@ FRONTEND_PORT=5174
 本プロジェクトは以下の設計思想に基づいています：
 
 - Outbox Pattern によるメール送信
-- Token Hash によるセキュリティ
+- `token_hash` によるセキュリティ
 - Rate Limit による攻撃対策
 - トランザクションによる整合性担保

@@ -123,6 +123,7 @@ db/migrations/000000_init_user.sql
 
 ```bash
 make fmt
+make lint
 make test-cover
 ```
 
@@ -154,7 +155,8 @@ docs/ai/
 ├── security.md
 ├── database.md
 ├── migration.md
-└── testing.md
+├── testing.md
+└── test-inventory.md
 ```
 
 ---

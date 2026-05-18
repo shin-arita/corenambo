@@ -604,7 +604,7 @@ Accept-Language: ja
 3. JSONバインド（display_name / password / password_confirmation / agreed_to_terms）
 4. IPレートリミットチェック
 5. バリデーション（display_name / password / password_confirmation / agreed_to_terms）
-6. token の SHA-256 ハッシュ化
+6. トークンの SHA-256 ハッシュ化
 7. トランザクション開始
    1. `user_registration_requests` を `FOR UPDATE` で取得（排他ロック）
    2. レコード存在チェック（不正トークン）
@@ -761,7 +761,7 @@ Accept-Language: ja
 
 1. クエリパラメータ `token` 取得（空なら即 400 INVALID_REGISTRATION_TOKEN）
 2. IPレートリミットチェック（Redis、5回/分）
-3. token の SHA-256 ハッシュ化
+3. トークンの SHA-256 ハッシュ化
 4. `user_registration_requests` を読み取り専用で取得（FOR UPDATEなし）
 5. レコード存在チェック（不正トークン）
 6. `verified_at IS NOT NULL` チェック（使用済み）
